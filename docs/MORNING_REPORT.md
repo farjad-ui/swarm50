@@ -92,8 +92,8 @@ suite passed. Run `pytest -q` from the repo root to reproduce.)
     specific call, which on a fresh cycle-1 wallet is effectively `starting_balance_usd` minus one
     call's cost — fine for its intended use, but worth knowing if this code is ever reused to analyze
     a later cycle's numbers.
-  - No PR was opened automatically (see below) — this environment's tools didn't include a
-    GitHub PR-creation call; the branch is pushed and ready.
+  - A PR was opened automatically: https://github.com/farjad-ui/swarm50/pull/1 (`overnight-build` ->
+    `main`), NOT merged.
   - `report/index.html`'s charts are intentionally simple (no zoom/pan/hover beyond SVG `<title>`
     tooltips) since no JS is allowed in the report per the brief.
 
@@ -108,4 +108,5 @@ pip install -r requirements.txt
 pytest -q
 ```
 
-The branch `overnight-build` is pushed to `origin` and is ready for a pull request against `main`.
+The branch `overnight-build` is pushed to `origin` and a pull request against `main` is open at
+https://github.com/farjad-ui/swarm50/pull/1 (not merged — for you to review).
