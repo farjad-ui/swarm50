@@ -266,3 +266,43 @@ Alternatives considered: only request tasks after a successful stake; rejected a
 from the brief's literal "when a bet is approved" wording, and it would require passing the stake
 outcome back into task creation, coupling two independently-append-only concerns.
 How to change it: `swarm50/queue.py::approve`.
+
+### D16 — Charts are hand-rolled inline SVG, no charting library   [FYI]
+Milestone: M5
+What I decided: `swarm50/report.py::_svg_bars` and `_svg_line` generate raw `<svg>` markup by hand
+(a bar chart for token spend by role/cycle, a line chart for balance over time), computed directly
+from the DB query results, with no JS and no external CSS/JS libraries of any kind.
+Why: the brief requires the report to be "a single self-contained report/index.html (inline CSS,
+inline SVG charts, no external requests, no JS frameworks)" -- a charting library would either need a
+`<script>` (a JS framework, explicitly disallowed) or a network fetch (explicitly disallowed).
+Alternatives considered: none; this was fully specified by the brief. The charts are intentionally
+simple (bars/lines with a title tooltip) rather than richly interactive, since there is no JS to add
+interactivity with.
+How to change it: `swarm50/report.py::_svg_bars`, `_svg_line`.
+
+### D17 — "share of budget spent on thinking" divides by starting_balance_usd, not current balance   [FYI]
+Milestone: M5
+What I decided: The headline tile computes `total_token_spend / starting_balance_usd * 100`, i.e. what
+fraction of the original $50 stake has gone to LLM calls so far -- not `total_token_spend /
+current_balance`, which would give a different (and less meaningful, since it moves for reasons
+unrelated to thinking cost) number as bets win or lose money.
+Why: "share of the budget" most naturally means share of the fixed budget the experiment started with,
+which is exactly the quantity H2 in `docs/PREREGISTRATION.md` ("token costs exceed 30% of the budget")
+is about -- this report tile and that hypothesis should use the same denominator.
+Alternatives considered: current balance as the denominator; rejected, see above.
+How to change it: `swarm50/report.py::_headline`.
+
+### D18 — Decision-log timeline shows one compact line per event, not full JSON payloads   [FYI]
+Milestone: M5
+What I decided: `swarm50/report.py::_event_line` renders each bet event as
+`c<cycle> <bet_id> <event_type> (<actor>) <verdict-or-decision-or-rule-or-reason-or-title>`, inside a
+single collapsed `<details>` block for the whole log (collapsed by default, per the brief), rather than
+pretty-printing each event's full JSON payload.
+Why: a 30-day run can accumulate hundreds of bet events; a scannable one-line-per-event timeline
+inside one scrollable, collapsed block is far more readable than expanding full JSON blobs per event,
+and still shows the memo -> critique -> rebuttal -> verdict -> human decision chain in order per bet_id
+(they interleave by insertion order across bets, but each line names its bet_id and cycle).
+Alternatives considered: a full JSON dump per event inside a nested `<details>` per event; rejected as
+needing a click per event to see anything, defeating "collapsed by default" as a *readable* default.
+Everything shown is still HTML-escaped, so this is a display choice, not a trust boundary change.
+How to change it: `swarm50/report.py::_event_line`, `_decision_log`.
