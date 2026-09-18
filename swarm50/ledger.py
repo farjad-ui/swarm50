@@ -86,14 +86,20 @@ class Ledger:
         return prices
 
     def cost_micro(self, model, input_tokens, output_tokens,
-                   cache_write_tokens=0, cache_read_tokens=0, web_search_requests=0) -> int:
+                   cache_write_tokens=0, cache_read_tokens=0, web_search_requests=0, discount=1.0) -> int:
+        """`discount` is a price multiplier (e.g. 0.5 for the Batches API's half-price rate);
+        it is applied AFTER the normal never-under-charge ceiling, so it never changes ordinary,
+        non-batch pricing (default 1.0 is a no-op)."""
         p = self._prices(model)
         per_mtok = (input_tokens * usd_to_micro(p["input_per_mtok_usd"])
                     + output_tokens * usd_to_micro(p["output_per_mtok_usd"])
                     + cache_write_tokens * usd_to_micro(p["cache_write_5m_per_mtok_usd"])
                     + cache_read_tokens * usd_to_micro(p["cache_read_per_mtok_usd"]))
         tokens = -(-per_mtok // MICRO)  # ceil: never under-charge
-        return tokens + web_search_requests * usd_to_micro(self.config["web_search_per_request_usd"])
+        cost = tokens + web_search_requests * usd_to_micro(self.config["web_search_per_request_usd"])
+        if discount != 1.0:
+            cost = int((Decimal(cost) * Decimal(str(discount))).to_integral_value(ROUND_HALF_UP))
+        return cost
 
     # ---- reads ----
     def _scalar(self, sql, *params) -> int:
@@ -151,11 +157,12 @@ class Ledger:
 
     def record_token_usage(self, cycle, agent, model, input_tokens, output_tokens,
                            cache_creation_input_tokens=0, cache_read_input_tokens=0,
-                           web_search_requests=0, backend=None, note=None) -> int:
+                           web_search_requests=0, backend=None, note=None, discount=1.0) -> int:
         """Debit real usage. The API was already called, so the cost is always recorded;
         limit breaches are raised AFTER the write so the ledger never lies."""
         cost = self.cost_micro(model, input_tokens, output_tokens,
-                               cache_creation_input_tokens, cache_read_input_tokens, web_search_requests)
+                               cache_creation_input_tokens, cache_read_input_tokens, web_search_requests,
+                               discount=discount)
         self._insert(cycle, "token_cost", -cost, agent=agent, model=model,
                      input_tokens=input_tokens, output_tokens=output_tokens,
                      cache_write_tokens=cache_creation_input_tokens,
