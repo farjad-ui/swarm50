@@ -1,0 +1,32 @@
+starting_balance_usd: 50
+cycle_token_cap_usd: 0.75
+max_stake_pct: 0.35              # per stake, against current balance
+max_open_exposure_pct: 0.60      # all open stakes, against balance + open exposure
+max_trading_exposure_pct: 0.50   # open stakes in category trading, against balance + open exposure
+end_date: 2026-10-19             # used for "days remaining" in the strategist state block
+web_search_per_request_usd: 0.01
+backend: claude_cli   # api | claude_cli
+cli_input_overhead_tokens: 600   # extra input tokens the CLI adds per request; used in the pre-call estimate only
+
+# Prices in USD per million tokens.
+models:
+  claude-fable-5-1:
+    input_per_mtok_usd: 10
+    output_per_mtok_usd: 50
+    cache_write_5m_per_mtok_usd: 12.50
+    cache_read_per_mtok_usd: 0.25
+  claude-sonnet-5:
+    input_per_mtok_usd: 2
+    output_per_mtok_usd: 10
+    cache_write_5m_per_mtok_usd: 2.50
+    cache_read_per_mtok_usd: 0.20
+  claude-haiku-4-5-20251001:
+    input_per_mtok_usd: 1
+    output_per_mtok_usd: 5
+    cache_write_5m_per_mtok_usd: 1.25
+    cache_read_per_mtok_usd: 0.10
+
+roles:
+  strategist: claude-fable-5-1
+  critic: claude-sonnet-5
+  worker: claude-haiku-4-5-20251001
