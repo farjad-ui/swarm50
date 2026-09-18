@@ -45,7 +45,8 @@ def test_approve_path(ledger, betlog, calls):
 def test_revise_rebuttal_final_path(ledger, betlog, calls):
     revised = memo(stake_usd=3, title="v2")
     calls.side_effect = [result(strategist(memo())), result(CRIT_REVISE),
-                         result({"action": "revise", "reason": "lowered stake", "memo": revised}),
+                         result({"responses": [{"objection": "stake too high", "response": "lowered stake"}],
+                                 "decision": "revise", "revised_memo": revised}),
                          result(CRIT_APPROVE)]
     run_cycle(ledger, betlog, 1)
     assert types(betlog, "c1-1") == ["proposed", "critiqued", "rebutted", "final_verdict"]
@@ -61,9 +62,13 @@ def test_revise_rebuttal_final_path(ledger, betlog, calls):
 
 def test_final_revise_counts_as_reject_and_withdraw(ledger, betlog, calls):
     calls.side_effect = [result(strategist(memo(), memo(title="second"))),
-                         result(CRIT_REJECT), result({"action": "revise", "reason": "x", "memo": memo()}),
+                         result(CRIT_REJECT),
+                         result({"responses": [{"objection": "x", "response": "y"}],
+                                 "decision": "revise", "revised_memo": memo()}),
                          result(CRIT_REVISE),  # final round: revise -> reject
-                         result(CRIT_REJECT), result({"action": "withdraw", "reason": "fair point"})]
+                         result(CRIT_REJECT),
+                         result({"responses": [{"objection": "x", "response": "fair point"}],
+                                 "decision": "withdraw"})]
     run_cycle(ledger, betlog, 1)
     assert types(betlog, "c1-1") == ["proposed", "critiqued", "rebutted", "final_verdict"]
     assert betlog.events("c1-1")[-1]["payload"]["verdict"] == "reject"

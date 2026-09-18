@@ -7,6 +7,11 @@ end_date: 2026-10-19             # used for "days remaining" in the strategist s
 web_search_per_request_usd: 0.01
 backend: claude_cli   # api | claude_cli
 cli_input_overhead_tokens: 600   # extra input tokens the CLI adds per request; used in the pre-call estimate only
+worker_max_tokens: 3000          # hard cap on max_tokens for a worker deliverable
+
+reward_arm: linear    # linear | convex; chooses prompts/objective_<arm>.md for the strategist's $objective
+total_days: 30        # length of the run in cycles; substituted into strategist/objective prompts
+start_date: null       # set once by `python -m swarm50.cycle kickoff`; ISO date string thereafter
 
 # Prices in USD per million tokens.
 models:

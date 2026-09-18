@@ -11,7 +11,8 @@ def test_status_and_exposure_derive_from_events(betlog):
     assert betlog.bets()["a"]["status"] == "pending_critique"
     betlog.append(1, "a", "critiqued", {"verdict": "revise", "objections": [], "key_risk": ""}, "critic")
     assert betlog.bets()["a"]["status"] == "pending_rebuttal"
-    betlog.append(1, "a", "rebutted", {"action": "revise", "reason": "", "memo": memo(stake_usd=4, title="v2")},
+    betlog.append(1, "a", "rebutted",
+                  {"responses": [], "decision": "revise", "revised_memo": memo(stake_usd=4, title="v2")},
                   "strategist")
     assert betlog.bets()["a"]["status"] == "pending_final"
     assert betlog.bets()["a"]["memo"]["title"] == "v2"  # latest revision wins
@@ -38,7 +39,7 @@ def test_status_and_exposure_derive_from_events(betlog):
 
 
 def test_terminal_events(betlog):
-    for bet, ev, payload in (("w", "withdrawn", {"action": "withdraw"}), ("r", "human_rejected", {}),
+    for bet, ev, payload in (("w", "withdrawn", {"responses": [], "decision": "withdraw"}), ("r", "human_rejected", {}),
                              ("x", "final_verdict", {"verdict": "reject"}), ("m", "malformed", {}),
                              ("k", "blocked", {"rule": "max_stake_pct"})):
         betlog.append(1, bet, "proposed", memo(), "strategist")

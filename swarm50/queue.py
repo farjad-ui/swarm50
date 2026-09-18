@@ -56,10 +56,12 @@ def cmd_show(ledger, betlog, bet_id):
             for o in p["objections"]:
                 print(f"  [{o['severity']}] {o['point']}")
         elif e["event_type"] in ("rebutted", "withdrawn"):
-            print(f"action: {p['action']}\nreason: {p['reason']}")
-            if p.get("memo"):
+            print(f"decision: {p['decision']}")
+            for r in p.get("responses", []):
+                print(f"  objection: {r['objection']}\n  response: {r['response']}")
+            if p.get("revised_memo"):
                 print("revised memo:")
-                _print_memo(p["memo"])
+                _print_memo(p["revised_memo"])
         else:
             print(json.dumps(p, indent=1))
         print()

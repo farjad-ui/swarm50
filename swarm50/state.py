@@ -13,14 +13,28 @@ def _days_remaining(config, today) -> int | None:
     return (end - today).days
 
 
+def _role_rates(config) -> str:
+    parts = []
+    for role, model in config.get("roles", {}).items():
+        p = config.get("models", {}).get(model, {})
+        parts.append(f"{role}={model} (${p.get('input_per_mtok_usd', '?')}/Mtok in,"
+                     f" ${p.get('output_per_mtok_usd', '?')}/Mtok out)")
+    return ", ".join(parts)
+
+
 def build_state(ledger, betlog, cycle, today=None) -> str:
     today = today or date.today()
     days = _days_remaining(ledger.config, today)
     total_tokens = -ledger._scalar("SELECT SUM(amount_micro) FROM transactions WHERE type='token_cost'")
+    cfg = ledger.config
     lines = [
         f"date: {today.isoformat()} | cycle: {cycle} | days remaining: {days if days is not None else 'n/a'}",
         f"balance: {fmt_usd(ledger.balance())} | token spend this cycle: {fmt_usd(ledger.cycle_spend(cycle))}"
         f" | total token spend: {fmt_usd(total_tokens)} | open exposure: {fmt_usd(betlog.open_exposure_micro())}",
+        f"token rates by role: {_role_rates(cfg)}",
+        f"caps: max_stake_pct={float(cfg['max_stake_pct']) * 100:g}% "
+        f"max_open_exposure_pct={float(cfg['max_open_exposure_pct']) * 100:g}% "
+        f"max_trading_exposure_pct={float(cfg['max_trading_exposure_pct']) * 100:g}%",
         "open bets:",
     ]
     open_bets = betlog.open_bets()
@@ -35,7 +49,7 @@ def build_state(ledger, betlog, cycle, today=None) -> str:
     if not events:
         lines.append("  (none)")
     for e in events:
-        verdict = e["payload"].get("verdict") or e["payload"].get("action") or e["payload"].get("rule") or ""
+        verdict = e["payload"].get("verdict") or e["payload"].get("decision") or e["payload"].get("rule") or ""
         lines.append(f"  c{e['cycle']} {e['bet_id']} {e['event_type']} ({e['actor']}) {verdict}".rstrip())
     lines.append("recently blocked:")
     blocked = betlog.recent_blocked(5)

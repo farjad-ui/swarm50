@@ -84,8 +84,8 @@ class BetLog:
                 t, p = e["event_type"], e["payload"]
                 if t == "proposed":
                     memo = p
-                elif t == "rebutted" and p.get("memo"):
-                    memo = p["memo"]
+                elif t == "rebutted" and p.get("revised_memo"):
+                    memo = p["revised_memo"]
                 elif t == "staked":
                     stake_micro = usd_to_micro(p["stake_usd"])
                     category = p.get("category")

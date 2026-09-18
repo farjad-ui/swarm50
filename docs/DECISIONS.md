@@ -54,3 +54,54 @@ Alternatives considered: leave `action`/`memo` as internal schema field names an
 the brief's prompt text is the source of truth for what the LLM will actually emit as JSON keys, so
 the schema should use the same names throughout.
 How to change it: `swarm50/schemas.py::Rebuttal`, `swarm50/review.py::_review_memo`.
+
+### D2 — Convex arm's "scales steeply" reward is undefined   [NEEDS FARJAD]
+Milestone: M1
+What I decided: Shipped `prompts/objective_convex.md` verbatim from the brief, including the vague
+"scales steeply with how far above $starting_balance you finish" language. I did not invent a concrete
+formula (e.g. "10x the profit") on the owner's behalf.
+Why: the brief explicitly says to leave the wording until the owner decides a reward he will actually
+honour; inventing one risks the agents being told something the owner never agrees to pay out.
+Alternatives considered: pick a default multiplier now so the convex arm is "fully specified"; rejected
+because a fabricated commitment is worse than an honest gap, and the brief says so directly.
+How to change it: `prompts/objective_convex.md` (the paragraph after "the budget for its next phase
+scales steeply..."). No code changes needed once the wording is decided; `swarm50/prompts.py::render_objective`
+substitutes `$total_days` and `$starting_balance` into whatever text is in the file.
+
+### D3 — Memo schema text embedded in prompts via introspection, not a copy   [FYI]
+Milestone: M1
+What I decided: `$memo_schema` in `prompts/strategist.md` and `prompts/rebuttal.md` is filled by
+`swarm50/schemas.py::memo_schema_text()`, which introspects `Memo.model_fields` at render time
+(field name: Python type name), rather than a hand-typed JSON schema string hardcoded in `prompts.py`
+(which the ground rules forbid) or duplicated by hand inside the .md files (which would drift from
+`schemas.py` the first time a field is added).
+Why: single source of truth; adding/renaming a Memo field automatically updates every prompt that cites
+the schema, and it satisfies "no prompt text hardcoded in Python" since this is schema *data*, not
+prose, and still lives in `schemas.py`, loaded via `string.Template` substitution in `prompts.py`.
+Alternatives considered: pydantic's built-in `model_json_schema()` (verbose, full JSON Schema with
+$defs, harder for the model to read at a glance); a hand-maintained schema block inside each prompt
+.md file (rejected: two sources of truth).
+How to change it: `swarm50/schemas.py::memo_schema_text()`.
+
+### D4 — Rebuttal responses is a list of {objection, response} pairs   [FYI]
+Milestone: M1
+What I decided: Added `swarm50/schemas.py::Response` (objection/response pair) as the item type of
+`Rebuttal.responses`, matching the brief's `rebuttal.md` output shape
+`"responses": [ {"objection": "...", "response": "..."} ]` exactly.
+Why: the brief specifies this shape verbatim in the prompt text; the schema must accept exactly what
+the prompt asks the model to produce.
+Alternatives considered: none; this was fully specified by the brief.
+How to change it: `swarm50/schemas.py::Response`, `Rebuttal.responses`.
+
+### D5 — State block additions for token rates and cap percentages   [FYI]
+Milestone: M1
+What I decided: Added two new lines to `swarm50/state.py::build_state`: `token rates by role: ...`
+(role=model with input/output $-per-Mtok) and `caps: max_stake_pct=...% max_open_exposure_pct=...%
+max_trading_exposure_pct=...%`, inserted right after the balance/exposure line and before "open bets:".
+Why: the brief says "Update the state block to include the token rates per role and the cap
+percentages, since the strategist prompt refers to them" but does not give an exact format.
+Alternatives considered: put the rates/caps only in the strategist system prompt (via `$objective`-style
+substitution) instead of the state block; rejected because the brief explicitly names the state block
+as the place for this, and it needs to be visible to the critic too (whose prompt also implicitly
+assumes the reader knows the caps, via "Rules" check #5).
+How to change it: `swarm50/state.py::_role_rates`, `build_state`.
