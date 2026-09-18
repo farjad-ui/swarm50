@@ -219,3 +219,50 @@ rejected for now as unnecessary event-log volume, but noted here in case the own
 visibility -- it would be a small, additive change (`EVENT_TYPES` in `bets.py` plus one line in
 `_apply_bet_actions`).
 How to change it: `swarm50/cycle.py::_apply_bet_actions`.
+
+### D13 — prompts/worker.md wording   [NEEDS FARJAD]
+Milestone: M4
+What I decided: Wrote `prompts/worker.md` myself (the brief asks for this explicitly, "Write it
+yourself and record it as [NEEDS FARJAD] for review"): a short system prompt telling the worker it has
+no tools and no network, to return only the requested deliverable with no preamble or meta-commentary,
+to make honest claims only and not invent facts/testimonials/results, and to disclose AI involvement
+in the deliverable itself where a reader/buyer would care, plus a closing line that nothing it writes
+is published automatically.
+Why: the brief specifies the constraints (no tools/network, honest claims only, disclose AI
+involvement where it matters, exactly the requested deliverable) but not exact wording, and explicitly
+flags this prompt for owner review since it's one of the four texts the strategist/critic/worker
+actually see.
+Alternatives considered: none meaningfully different in substance; wording choices (e.g. how bluntly
+to state the no-fabrication rule) are exactly what the owner should review and adjust to taste.
+How to change it: `prompts/worker.md` (loaded via `swarm50/prompts.py::render_worker`, no template
+variables to fill).
+
+### D14 — human_task_requested actor is "cfo", not "human"   [FYI]
+Milestone: M4
+What I decided: `swarm50/tasks.py::request_tasks` writes `human_task_requested` events with
+`actor="cfo"` (the same neutral "system/admin" actor already used for `staked` and `blocked` events),
+not `actor="human"`.
+Why: `actor` records who DID the thing the event describes. A task being *requested* is the system
+telling the human what to do, generated automatically the moment a bet is approved -- the human hasn't
+acted yet at that point, they act later when they call `queue.py tasks done`, which correctly writes
+`human_task_done` with `actor="human"`.
+Alternatives considered: `actor="strategist"`, since the tasks originate from the memo's
+`human_actions_required` list the strategist wrote; rejected because the strategist did not perform
+this specific event-generating action, the code did, at approval time, which is exactly the pattern
+`cfo` already represents elsewhere (guardrail checks, staking).
+How to change it: `swarm50/tasks.py::request_tasks`.
+
+### D15 — Tasks are requested at human_approved, even if staking is later blocked by a guardrail   [FYI]
+Milestone: M4
+What I decided: `queue.approve()` writes `human_task_requested` events for a memo's
+`human_actions_required` right after writing `human_approved`, regardless of whether the subsequent
+`cfo.try_stake()` call succeeds or writes a `blocked` event instead.
+Why: the brief says tasks are requested "when a bet is approved" (i.e. at human approval), not "when a
+bet is staked". A guardrail block is rare (the human already saw the memo and its stake before
+approving) and, if it happens, the operator will notice the `blocked` event in the bet's history right
+next to the tasks they were just asked to do; leaving stale open tasks around for a bet that never got
+staked seemed like a smaller problem than silently not asking for tasks a human-approved bet needed.
+Alternatives considered: only request tasks after a successful stake; rejected as a bigger deviation
+from the brief's literal "when a bet is approved" wording, and it would require passing the stake
+outcome back into task creation, coupling two independently-append-only concerns.
+How to change it: `swarm50/queue.py::approve`.

@@ -3,7 +3,7 @@ import argparse
 import json
 import sys
 
-from . import cfo
+from . import cfo, tasks
 from .bets import BetLog
 from .ledger import Ledger, fmt_usd
 from .schemas import Memo
@@ -25,7 +25,10 @@ def approve(ledger, betlog, bet_id) -> bool:
         sys.exit(f"{bet_id} is {bet['status']}, not queued")
     cycle = _bet_cycle(betlog, bet_id)
     betlog.append(cycle, bet_id, "human_approved", {}, "human")
-    return cfo.try_stake(ledger, betlog, cycle, bet_id, Memo.model_validate(bet["memo"]))
+    memo = Memo.model_validate(bet["memo"])
+    if memo.human_actions_required:
+        tasks.request_tasks(betlog, cycle, bet_id, memo.human_actions_required)
+    return cfo.try_stake(ledger, betlog, cycle, bet_id, memo)
 
 
 def reject(ledger, betlog, bet_id, reason):
@@ -48,6 +51,19 @@ def close(ledger, betlog, bet_id, note=None):
     if bet_id not in betlog.bets():
         sys.exit(f"unknown bet {bet_id}")
     betlog.append(_bet_cycle(betlog, bet_id), bet_id, "closed", {"note": note}, "human")
+
+
+def cmd_tasks_list(betlog):
+    open_ = tasks.open_tasks(betlog)
+    if not open_:
+        print("no open tasks")
+    for tid, t in sorted(open_.items()):
+        print(f"{tid:<16} c{t['cycle']:<3} {t['bet_id']:<10} age {tasks.age_days(t)}d   {t['description']}")
+
+
+def cmd_tasks_done(betlog, task_id, note):
+    tasks.mark_done(betlog, task_id, note)
+    print(f"marked {task_id} done")
 
 
 def cmd_list(ledger, betlog):
@@ -107,6 +123,12 @@ def main(argv=None):
     c = sub.add_parser("close")
     c.add_argument("bet_id")
     c.add_argument("--note", default=None)
+    t = sub.add_parser("tasks")
+    tsub = t.add_subparsers(dest="tasks_cmd", required=True)
+    tsub.add_parser("list")
+    td = tsub.add_parser("done")
+    td.add_argument("task_id")
+    td.add_argument("--note", default=None)
     a = ap.parse_args(argv)
 
     ledger = Ledger()
@@ -129,6 +151,11 @@ def main(argv=None):
     elif a.cmd == "close":
         close(ledger, betlog, a.bet_id, note=a.note)
         print(f"closed {a.bet_id}")
+    elif a.cmd == "tasks":
+        if a.tasks_cmd == "list":
+            cmd_tasks_list(betlog)
+        elif a.tasks_cmd == "done":
+            cmd_tasks_done(betlog, a.task_id, a.note)
 
 
 if __name__ == "__main__":

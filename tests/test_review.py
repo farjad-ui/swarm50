@@ -117,10 +117,10 @@ def test_human_approve_stakes_and_reject_records(ledger, betlog, calls):
                          result(CRIT_APPROVE), result(CRIT_APPROVE)]
     run_cycle(ledger, betlog, 1)
     assert queue.approve(ledger, betlog, "c1-1")
-    assert types(betlog, "c1-1") == ["proposed", "critiqued", "human_approved", "staked"]
+    assert types(betlog, "c1-1") == ["proposed", "critiqued", "human_approved", "human_task_requested", "staked"]
     assert ledger.balance() == 45_000_000
     assert not queue.approve(ledger, betlog, "c1-2")  # 20 > 35% of 45
-    assert types(betlog, "c1-2") == ["proposed", "critiqued", "human_approved", "blocked"]
+    assert types(betlog, "c1-2") == ["proposed", "critiqued", "human_approved", "human_task_requested", "blocked"]
     assert ledger.balance() == 45_000_000
     queue.reject(ledger, betlog, "c1-2", "no")
     assert betlog.bets()["c1-2"]["status"] == "rejected"

@@ -2,6 +2,7 @@
 from datetime import date
 
 from .ledger import MICRO, fmt_usd
+from .tasks import age_days, open_tasks
 
 
 def _days_remaining(config, today) -> int | None:
@@ -60,6 +61,12 @@ def build_state(ledger, betlog, cycle, today=None) -> str:
     for e in events:
         verdict = e["payload"].get("verdict") or e["payload"].get("decision") or e["payload"].get("rule") or ""
         lines.append(f"  c{e['cycle']} {e['bet_id']} {e['event_type']} ({e['actor']}) {verdict}".rstrip())
+    lines.append("open human tasks:")
+    tasks = open_tasks(betlog)
+    if not tasks:
+        lines.append("  (none)")
+    for tid, t in sorted(tasks.items()):
+        lines.append(f"  {tid}  {t['bet_id']}  age {age_days(t, today)}d  {t['description']!r}")
     lines.append("recently blocked:")
     blocked = betlog.recent_blocked(5)
     if not blocked:
