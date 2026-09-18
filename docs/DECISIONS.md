@@ -105,3 +105,49 @@ substitution) instead of the state block; rejected because the brief explicitly 
 as the place for this, and it needs to be visible to the critic too (whose prompt also implicitly
 assumes the reader knows the caps, via "Rules" check #5).
 How to change it: `swarm50/state.py::_role_rates`, `build_state`.
+
+### D6 — Batch API support lives in metered.py, gated to the api backend, UNVERIFIED AGAINST REAL API   [FYI]
+Milestone: M2
+What I decided: Added `metered_batch_call()` to `swarm50/metered.py` (the only file allowed to touch
+the Anthropic SDK), which submits one `client.messages.batches.create()` for N requests, polls
+`batches.retrieve()` until `processing_status == "ended"`, and prices results via
+`ledger.record_token_usage(..., discount=0.5)`. `ledger.cost_micro()`/`record_token_usage()` gained an
+optional `discount` parameter (default `1.0`, a no-op) so this could be added without touching any
+existing non-batch pricing path or test. `--batch` in `scripts/dry_run.py` raises `ValueError` if
+`backend != "api"`. This code path is exercised ONLY against mocks (`tests/test_dryrun.py`,
+`tests/test_metered.py`-style mocking of `anthropic.Anthropic`) and has never been run against the
+real Batches API, per the ground rule against real API calls in this session.
+Why: the brief requires `--batch` to use the real Batches API shape (submit/poll/retrieve), routed
+through `metered.py`, at half price, and explicitly says to mark it `UNVERIFIED AGAINST REAL API`.
+Alternatives considered: fake the discount by just running N calls sequentially and halving the
+recorded cost after the fact (simpler, but doesn't exercise the actual Batches API request/poll/result
+shape at all, which defeats the purpose of the flag existing); rejected.
+How to change it: `swarm50/metered.py::_call_api_batch`, `metered_batch_call`, `BATCH_DISCOUNT`.
+**UNVERIFIED AGAINST REAL API** — before using `--batch` for real, run it once against a real API key
+outside this session and confirm the batch request/response shapes above still match the current
+Anthropic SDK version pinned in `requirements.txt`.
+
+### D7 — Dry-run report metric is "stake as share of *current* balance", not starting balance   [FYI]
+Milestone: M2
+What I decided: `dry_run_report.py`'s "mean/median stake as a share of balance by category" divides
+each memo's `stake_usd` by that run's ledger balance at the moment the strategist responded (recorded
+per-run as `balance_usd` in the JSONL), not by the fixed `starting_balance_usd` from config.
+Why: on cycle 1 with a fresh wallet these are numerically almost identical (balance is starting balance
+minus the cost of the one strategist call itself), but the balance-at-call-time is the actual number
+the strategist could compute a percentage against, so it is the more meaningful denominator, and it
+generalizes if this report code is ever pointed at a later cycle's dry runs.
+Alternatives considered: divide by `config["starting_balance_usd"]` directly; simpler, but silently
+wrong if the harness is ever run against a non-fresh wallet.
+How to change it: `swarm50/dryrun.py::summarize` (uses `r["balance_usd"]`), `_record` (writes it).
+
+### D8 — results/, artifacts/, report/ are git-ignored generated output   [FYI]
+Milestone: M2
+What I decided: Added `results/`, `artifacts/` (M4) and `report/` (M5) to `.gitignore`, alongside the
+existing `state/`.
+Why: all three are regenerated from the append-only DB (or, for `results/`, from mocked dry runs) and
+contain potentially large or numerous files; committing them would bloat the repo with derived data
+that the code can always reproduce.
+Alternatives considered: commit at least one example `results/dryrun_*.jsonl` and `report/index.html`
+as a demo artifact; decided against it to keep the repo's tracked contents to source only, matching how
+`state/` (the ledger DB) was already treated.
+How to change it: `.gitignore`.
