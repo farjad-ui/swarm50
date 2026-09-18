@@ -38,12 +38,21 @@ def build_state(ledger, betlog, cycle, today=None) -> str:
         "open bets:",
     ]
     open_bets = betlog.open_bets()
+    overdue_ids = []
     if not open_bets:
         lines.append("  (none)")
     for bet_id, b in open_bets.items():
         m = b["memo"] or {}
+        kill_by = m.get("kill_by_cycle")
+        overdue = isinstance(kill_by, int) and cycle > kill_by
+        if overdue:
+            overdue_ids.append(bet_id)
+        suffix = "  *** OVERDUE: past kill_by_cycle, hold or kill explicitly this cycle ***" if overdue else ""
         lines.append(f"  {bet_id}  {b['status']}  stake {fmt_usd(b['stake_micro'])}  {m.get('category', '?')}"
-                     f"  kill_by_cycle {m.get('kill_by_cycle', '?')}  {m.get('title', '')!r}")
+                     f"  kill_by_cycle {m.get('kill_by_cycle', '?')}  {m.get('title', '')!r}{suffix}")
+    if overdue_ids:
+        lines.insert(4, f"*** {len(overdue_ids)} bet(s) past kill_by_cycle and awaiting an explicit "
+                        f"hold or kill this cycle: {', '.join(overdue_ids)} ***")
     lines.append("last 10 bet events:")
     events = betlog.events(limit=10)
     if not events:

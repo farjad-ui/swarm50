@@ -79,26 +79,49 @@ def _review_memo(ledger, betlog, cycle, bet_id, memo, state):
                                                    "critic_verdict": final.verdict}, "critic")
 
 
-def run_cycle(ledger, betlog, cycle, today=None) -> dict:
-    """Returns {"proposed": [bet_ids], "stopped": reason-or-None, "no_bet_reason": str-or-None}."""
-    summary = {"proposed": [], "stopped": None, "no_bet_reason": None}
+def call_strategist(ledger, betlog, cycle, today=None):
+    """One strategist call (plus its one repair retry). Returns (resp_or_None, err_or_None, state_str).
+    Raises CycleCapExceeded/WalletEmpty if the pre-call budget gate refuses this call."""
     state = build_state(ledger, betlog, cycle, today)
+    strategist_system = render_strategist(ledger.config)
+    resp, err = _ask_parsed(ledger, cycle, "strategist", "strategist", strategist_system, state,
+                            StrategistResponse, STRATEGIST_MAX_TOKENS)
+    return resp, err, state
+
+
+def review_memos(ledger, betlog, cycle, memos, state, proposed=None) -> list[str]:
+    """Runs the critic loop (approve / revise-rebuttal-final / reject) on each new memo in order.
+    Returns the list of bet_ids created, in proposal order. `proposed`, if given, is mutated in
+    place as each bet_id is proposed, so a caller sees partial progress if a later memo's critic
+    loop raises (e.g. mid-cycle budget exhaustion)."""
+    proposed = proposed if proposed is not None else []
+    for i, memo in enumerate(memos, 1):
+        bet_id = f"c{cycle}-{i}"
+        betlog.append(cycle, bet_id, "proposed", memo.model_dump(), "strategist")
+        proposed.append(bet_id)
+        _review_memo(ledger, betlog, cycle, bet_id, memo, state)
+    return proposed
+
+
+def run_cycle(ledger, betlog, cycle, today=None) -> dict:
+    """Strategist call followed immediately by the critic loop on every proposed memo.
+    Returns {"proposed": [bet_ids], "stopped": reason-or-None, "no_bet_reason": str-or-None,
+    "bet_actions": [...], "work_orders": [...]} (the latter two straight from the strategist's
+    response, unapplied here -- swarm50.cycle applies bet_actions and executes work_orders,
+    interleaved between the strategist call and the critic loop, via call_strategist/review_memos)."""
+    summary = {"proposed": [], "stopped": None, "no_bet_reason": None, "bet_actions": [], "work_orders": []}
     try:
-        strategist_system = render_strategist(ledger.config)
-        resp, err = _ask_parsed(ledger, cycle, "strategist", "strategist", strategist_system, state,
-                                StrategistResponse, STRATEGIST_MAX_TOKENS)
+        resp, err, state = call_strategist(ledger, betlog, cycle, today)
         if resp is None:
             betlog.append(cycle, f"c{cycle}-strategist", "malformed", err, "strategist")
             return summary
+        summary["bet_actions"] = [a.model_dump() for a in resp.bet_actions]
+        summary["work_orders"] = [w.model_dump() for w in resp.work_orders]
         if not resp.memos:
             summary["no_bet_reason"] = resp.no_bet_reason
             log.info("cycle %s: no bet proposed: %s", cycle, resp.no_bet_reason)
             return summary
-        for i, memo in enumerate(resp.memos, 1):
-            bet_id = f"c{cycle}-{i}"
-            betlog.append(cycle, bet_id, "proposed", memo.model_dump(), "strategist")
-            summary["proposed"].append(bet_id)
-            _review_memo(ledger, betlog, cycle, bet_id, memo, state)
+        review_memos(ledger, betlog, cycle, resp.memos, state, proposed=summary["proposed"])
     except (CycleCapExceeded, WalletEmpty) as e:
         summary["stopped"] = f"{type(e).__name__}: {e}"
         log.warning("cycle %s stopped early: %s", cycle, summary["stopped"])

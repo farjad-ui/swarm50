@@ -32,6 +32,24 @@ def reject(ledger, betlog, bet_id, reason):
     betlog.append(_bet_cycle(betlog, bet_id), bet_id, "human_rejected", {"reason": reason}, "human")
 
 
+def record_return(ledger, betlog, bet_id, amount_usd, type="bet_return", note=None):
+    """Human only: records real-world money coming back on a bet. Never mutates the stake event;
+    it's simply a new ledger credit plus a `return_recorded` bet event."""
+    if bet_id not in betlog.bets():
+        sys.exit(f"unknown bet {bet_id}")
+    cycle = _bet_cycle(betlog, bet_id)
+    ledger.record_return(cycle, bet_id, amount_usd, type=type)
+    betlog.append(cycle, bet_id, "return_recorded",
+                 {"amount_usd": amount_usd, "type": type, "note": note}, "human")
+
+
+def close(ledger, betlog, bet_id, note=None):
+    """Human only: marks a bet closed (no more activity expected). Does not touch its returns."""
+    if bet_id not in betlog.bets():
+        sys.exit(f"unknown bet {bet_id}")
+    betlog.append(_bet_cycle(betlog, bet_id), bet_id, "closed", {"note": note}, "human")
+
+
 def cmd_list(ledger, betlog):
     queued = betlog.queued()
     if not queued:
@@ -81,6 +99,14 @@ def main(argv=None):
     r = sub.add_parser("reject")
     r.add_argument("bet_id")
     r.add_argument("--reason", required=True)
+    rr = sub.add_parser("record-return")
+    rr.add_argument("bet_id")
+    rr.add_argument("amount_usd", type=float)
+    rr.add_argument("--type", choices=["revenue", "bet_return"], default="bet_return")
+    rr.add_argument("--note", default=None)
+    c = sub.add_parser("close")
+    c.add_argument("bet_id")
+    c.add_argument("--note", default=None)
     a = ap.parse_args(argv)
 
     ledger = Ledger()
@@ -97,6 +123,12 @@ def main(argv=None):
     elif a.cmd == "reject":
         reject(ledger, betlog, a.bet_id, a.reason)
         print(f"rejected {a.bet_id}")
+    elif a.cmd == "record-return":
+        record_return(ledger, betlog, a.bet_id, a.amount_usd, type=a.type, note=a.note)
+        print(f"recorded {a.type} ${a.amount_usd} on {a.bet_id}; balance now {fmt_usd(ledger.balance())}")
+    elif a.cmd == "close":
+        close(ledger, betlog, a.bet_id, note=a.note)
+        print(f"closed {a.bet_id}")
 
 
 if __name__ == "__main__":

@@ -151,3 +151,71 @@ Alternatives considered: commit at least one example `results/dryrun_*.jsonl` an
 as a demo artifact; decided against it to keep the repo's tracked contents to source only, matching how
 `state/` (the ledger DB) was already treated.
 How to change it: `.gitignore`.
+
+### D9 — run_meta is its own append-only table, not folded into bet_events   [FYI]
+Milestone: M3
+What I decided: Added `swarm50/cycle.py::RunLog`, a second append-only table (`run_meta`, same
+no-update/no-delete trigger pattern as `transactions` and `bet_events`) for the four events that are
+NOT about one specific bet: `kickoff`, `cycle_summary`, `cycle_error`, `run_ended`.
+Why: `bet_events.bet_id` is `NOT NULL`; a cycle-level or run-level event has no natural bet_id, and
+overloading it with a sentinel value (`"__run__"`) would make `bets()`'s per-bet folding logic have to
+special-case it forever. A separate table keeps both event logs simple and keeps the CHECK-constrained
+event-type lists small and specific to what actually happens at each level.
+Alternatives considered: one shared `events` table with a nullable `bet_id`; rejected because it would
+require touching `bets.py`'s folding logic to skip null-bet_id rows everywhere, for no real benefit.
+How to change it: `swarm50/cycle.py::RunLog`, `SCHEMA`, `RUN_EVENT_TYPES`.
+
+### D10 — start_date lives in the kickoff event, not by rewriting config.yaml   [FYI]
+Milestone: M3
+What I decided: `python -m swarm50.cycle kickoff` does NOT rewrite `config.yaml`'s `start_date: null`
+in place. Instead, the authoritative start date is stored once in the `kickoff` `run_meta` event's
+payload, and `cycle_number()` always derives the cycle from that event, not from the config file.
+Why: rewriting a YAML file from a running process is fragile (formatting/comments can be lost,
+concurrent runs could race) and breaks the "config.yaml's cap values must not be touched by code"
+spirit of the ground rules; keeping the start date as an event is consistent with "state is derived
+from events, never stored and mutated" (ground rule 6) and survives config.yaml being reformatted or
+regenerated.
+Alternatives considered: read/modify/write `config.yaml` with `ruamel.yaml` to preserve comments;
+works, but adds a dependency and a file-write side effect to a CLI whose only other writes are to the
+SQLite DB. `start_date: null` in `config.yaml` is left purely as owner-facing documentation of the
+field's existence and default.
+How to change it: `swarm50/cycle.py::kickoff`, `cycle_number`.
+
+### D11 — "Death" (insolvency) triggers only when the pre-call gate refuses the FIRST call of a cycle   [FYI]
+Milestone: M3
+What I decided: `swarm50/cycle.py::run` treats a `CycleCapExceeded`/`WalletEmpty` raised during the
+strategist's own call (before any memo was proposed this cycle) as permanent insolvency: it writes a
+`run_ended` event with reason `insolvent` and every future `run` call raises `CycleError`. The SAME
+exception type raised later in the same cycle (e.g. mid critic-loop, after 1+ memos were already
+proposed and written) is treated as an ordinary early stop: the cycle's `cycle_summary` records
+`stopped`, but the run is NOT ended, and the next day's cycle can still be attempted.
+Why: the brief's wording ("if the pre-call gate refuses the strategist call") describes the case where
+the wallet cannot afford even one more call at all -- a dead wallet. `CycleCapExceeded` alone can also
+fire mid-cycle purely because that day's `cycle_token_cap_usd` (a small, per-cycle allowance, currently
+$0.75) is already spent on earlier calls this cycle, which resets automatically next cycle and is not
+evidence the wallet itself is dead. Treating every mid-cycle cap hit as fatal would kill the whole
+30-day run over a single expensive critic loop, which is far more aggressive than the brief intends.
+Alternatives considered: only ever treat `WalletEmpty` (not `CycleCapExceeded`) as fatal, since it is
+the ledger's actual "balance <= 0" signal; rejected because the very first call of a cycle CAN also
+raise `CycleCapExceeded` if a single call's worst-case cost already exceeds the cycle cap (a config
+mismatch), and that is just as fatal in practice as `WalletEmpty` -- there is no way to ever make
+progress again under that config, so it should also end the run rather than retry forever.
+How to change it: `swarm50/cycle.py::run`, the `except (CycleCapExceeded, WalletEmpty)` block
+(the `counts["memos_proposed"] == 0 and counts["malformed"] == 0` condition is the "was this the very
+first call" check).
+
+### D12 — "hold" bet_action is a no-op; only "kill" writes an event   [FYI]
+Milestone: M3
+What I decided: In `swarm50/cycle.py::_apply_bet_actions`, a `bet_actions` entry with
+`"action": "hold"` writes nothing to `bet_events`; only `"action": "kill"` writes a `killed` event
+(or a `blocked` event if the target bet isn't currently `active`).
+Why: "hold" means "leave this bet exactly as it is", which is already the derived status if no new
+event is written; writing a `held` event with no status-changing effect would just be log noise on
+every single cycle for every open bet the strategist explicitly chooses not to kill, and the brief's
+`_STATUS` derivation in `bets.py` has no status for "held" to begin with.
+Alternatives considered: add a `held` event type purely for the audit trail (M7's morning report /
+M5's decision-log timeline would then show the strategist explicitly considered the bet each cycle);
+rejected for now as unnecessary event-log volume, but noted here in case the owner wants that
+visibility -- it would be a small, additive change (`EVENT_TYPES` in `bets.py` plus one line in
+`_apply_bet_actions`).
+How to change it: `swarm50/cycle.py::_apply_bet_actions`.
