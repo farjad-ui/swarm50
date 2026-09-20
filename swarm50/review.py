@@ -2,36 +2,31 @@
 import json
 import logging
 
-from .config import ROOT
 from .exceptions import CycleCapExceeded, WalletEmpty
 from .metered import metered_call
+from .prompts import render_critic, render_critic_final, render_rebuttal, render_strategist
 from .schemas import Critique, Rebuttal, StrategistResponse, parse_model
 from .state import build_state
 
 log = logging.getLogger("swarm50.review")
-PROMPTS_DIR = ROOT / "prompts"
 STRATEGIST_MAX_TOKENS = 4000
 CRITIC_MAX_TOKENS = 2000
 
 
-def load_prompt(name) -> str:
-    return (PROMPTS_DIR / f"{name}.md").read_text(encoding="utf-8")
-
-
-def _ask(ledger, cycle, agent, role, prompt_name, user, max_tokens) -> str:
+def _ask(ledger, cycle, agent, role, system, user, max_tokens) -> str:
     return metered_call(ledger, cycle, agent, role, [{"role": "user", "content": user}],
-                        system=load_prompt(prompt_name), max_tokens=max_tokens).text
+                        system=system, max_tokens=max_tokens).text
 
 
-def _ask_parsed(ledger, cycle, agent, role, prompt_name, user, model_cls, max_tokens):
+def _ask_parsed(ledger, cycle, agent, role, system, user, model_cls, max_tokens):
     """One call plus ONE repair retry that quotes the validation error. Returns (parsed, None) or (None, info)."""
-    text = _ask(ledger, cycle, agent, role, prompt_name, user, max_tokens)
+    text = _ask(ledger, cycle, agent, role, system, user, max_tokens)
     try:
         return parse_model(model_cls, text), None
     except ValueError as first:
         repair = (f"{user}\n\n## Validation error in your previous response\n{first}\n\n"
                   f"## Your previous response\n{text}")
-        text2 = _ask(ledger, cycle, agent, role, prompt_name, repair, max_tokens)
+        text2 = _ask(ledger, cycle, agent, role, system, repair, max_tokens)
         try:
             return parse_model(model_cls, text2), None
         except ValueError as second:
@@ -44,7 +39,9 @@ def _section(title, obj) -> str:
 
 
 def _review_memo(ledger, betlog, cycle, bet_id, memo, state):
-    critique, err = _ask_parsed(ledger, cycle, "critic", "critic", "critic",
+    config = ledger.config
+    critic_system = render_critic(state)
+    critique, err = _ask_parsed(ledger, cycle, "critic", "critic", critic_system,
                                 f"{state}\n\n{_section('Memo', memo.model_dump())}", Critique, CRITIC_MAX_TOKENS)
     if critique is None:
         betlog.append(cycle, bet_id, "malformed", err, "critic")
@@ -54,22 +51,25 @@ def _review_memo(ledger, betlog, cycle, bet_id, memo, state):
         return  # derived status: queued
 
     rebuttal, err = _ask_parsed(
-        ledger, cycle, "strategist", "strategist", "rebuttal",
+        ledger, cycle, "strategist", "strategist", render_rebuttal(config),
         f"{state}\n\n{_section('Memo', memo.model_dump())}\n\n{_section('Critique', critique.model_dump())}",
         Rebuttal, STRATEGIST_MAX_TOKENS)
     if rebuttal is None:
         betlog.append(cycle, bet_id, "malformed", err, "strategist")
         return
-    if rebuttal.action == "withdraw":
+    if rebuttal.decision == "withdraw":
         betlog.append(cycle, bet_id, "withdrawn", rebuttal.model_dump(), "strategist")
         return
     betlog.append(cycle, bet_id, "rebutted", rebuttal.model_dump(), "strategist")
 
-    # Final round reuses the critic prompt and schema; "revise" is not available here and counts as reject.
+    # Final round reuses the critic prompt and schema, with the critic_final.md instruction appended;
+    # "revise" is not available here and counts as reject.
+    final_system = render_critic_final(state)
     final, err = _ask_parsed(
-        ledger, cycle, "critic", "critic", "critic",
-        f"{state}\n\n{_section('Memo', rebuttal.memo.model_dump())}\n\n"
-        f"{_section('Prior critique', critique.model_dump())}\n\n{_section('Rebuttal', {'reason': rebuttal.reason})}",
+        ledger, cycle, "critic", "critic", final_system,
+        f"{state}\n\n{_section('Memo', rebuttal.revised_memo.model_dump())}\n\n"
+        f"{_section('Prior critique', critique.model_dump())}\n\n"
+        f"{_section('Rebuttal', {'responses': [r.model_dump() for r in rebuttal.responses]})}",
         Critique, CRITIC_MAX_TOKENS)
     if final is None:
         betlog.append(cycle, bet_id, "malformed", err, "critic")
@@ -79,25 +79,49 @@ def _review_memo(ledger, betlog, cycle, bet_id, memo, state):
                                                    "critic_verdict": final.verdict}, "critic")
 
 
-def run_cycle(ledger, betlog, cycle, today=None) -> dict:
-    """Returns {"proposed": [bet_ids], "stopped": reason-or-None, "no_bet_reason": str-or-None}."""
-    summary = {"proposed": [], "stopped": None, "no_bet_reason": None}
+def call_strategist(ledger, betlog, cycle, today=None):
+    """One strategist call (plus its one repair retry). Returns (resp_or_None, err_or_None, state_str).
+    Raises CycleCapExceeded/WalletEmpty if the pre-call budget gate refuses this call."""
     state = build_state(ledger, betlog, cycle, today)
+    strategist_system = render_strategist(ledger.config)
+    resp, err = _ask_parsed(ledger, cycle, "strategist", "strategist", strategist_system, state,
+                            StrategistResponse, STRATEGIST_MAX_TOKENS)
+    return resp, err, state
+
+
+def review_memos(ledger, betlog, cycle, memos, state, proposed=None) -> list[str]:
+    """Runs the critic loop (approve / revise-rebuttal-final / reject) on each new memo in order.
+    Returns the list of bet_ids created, in proposal order. `proposed`, if given, is mutated in
+    place as each bet_id is proposed, so a caller sees partial progress if a later memo's critic
+    loop raises (e.g. mid-cycle budget exhaustion)."""
+    proposed = proposed if proposed is not None else []
+    for i, memo in enumerate(memos, 1):
+        bet_id = f"c{cycle}-{i}"
+        betlog.append(cycle, bet_id, "proposed", memo.model_dump(), "strategist")
+        proposed.append(bet_id)
+        _review_memo(ledger, betlog, cycle, bet_id, memo, state)
+    return proposed
+
+
+def run_cycle(ledger, betlog, cycle, today=None) -> dict:
+    """Strategist call followed immediately by the critic loop on every proposed memo.
+    Returns {"proposed": [bet_ids], "stopped": reason-or-None, "no_bet_reason": str-or-None,
+    "bet_actions": [...], "work_orders": [...]} (the latter two straight from the strategist's
+    response, unapplied here -- swarm50.cycle applies bet_actions and executes work_orders,
+    interleaved between the strategist call and the critic loop, via call_strategist/review_memos)."""
+    summary = {"proposed": [], "stopped": None, "no_bet_reason": None, "bet_actions": [], "work_orders": []}
     try:
-        resp, err = _ask_parsed(ledger, cycle, "strategist", "strategist", "strategist", state,
-                                StrategistResponse, STRATEGIST_MAX_TOKENS)
+        resp, err, state = call_strategist(ledger, betlog, cycle, today)
         if resp is None:
             betlog.append(cycle, f"c{cycle}-strategist", "malformed", err, "strategist")
             return summary
+        summary["bet_actions"] = [a.model_dump() for a in resp.bet_actions]
+        summary["work_orders"] = [w.model_dump() for w in resp.work_orders]
         if not resp.memos:
             summary["no_bet_reason"] = resp.no_bet_reason
             log.info("cycle %s: no bet proposed: %s", cycle, resp.no_bet_reason)
             return summary
-        for i, memo in enumerate(resp.memos, 1):
-            bet_id = f"c{cycle}-{i}"
-            betlog.append(cycle, bet_id, "proposed", memo.model_dump(), "strategist")
-            summary["proposed"].append(bet_id)
-            _review_memo(ledger, betlog, cycle, bet_id, memo, state)
+        review_memos(ledger, betlog, cycle, resp.memos, state, proposed=summary["proposed"])
     except (CycleCapExceeded, WalletEmpty) as e:
         summary["stopped"] = f"{type(e).__name__}: {e}"
         log.warning("cycle %s stopped early: %s", cycle, summary["stopped"])

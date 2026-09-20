@@ -31,7 +31,8 @@ def calls():
 def test_approve_path(ledger, betlog, calls):
     calls.side_effect = [result(strategist(memo())), result(CRIT_APPROVE)]
     summary = run_cycle(ledger, betlog, 1, today=date(2026, 9, 19))
-    assert summary == {"proposed": ["c1-1"], "stopped": None, "no_bet_reason": None}
+    assert summary == {"proposed": ["c1-1"], "stopped": None, "no_bet_reason": None,
+                       "bet_actions": [], "work_orders": []}
     assert types(betlog, "c1-1") == ["proposed", "critiqued"]
     assert betlog.bets()["c1-1"]["status"] == "queued"
     assert calls.call_count == 2
@@ -45,7 +46,8 @@ def test_approve_path(ledger, betlog, calls):
 def test_revise_rebuttal_final_path(ledger, betlog, calls):
     revised = memo(stake_usd=3, title="v2")
     calls.side_effect = [result(strategist(memo())), result(CRIT_REVISE),
-                         result({"action": "revise", "reason": "lowered stake", "memo": revised}),
+                         result({"responses": [{"objection": "stake too high", "response": "lowered stake"}],
+                                 "decision": "revise", "revised_memo": revised}),
                          result(CRIT_APPROVE)]
     run_cycle(ledger, betlog, 1)
     assert types(betlog, "c1-1") == ["proposed", "critiqued", "rebutted", "final_verdict"]
@@ -61,9 +63,13 @@ def test_revise_rebuttal_final_path(ledger, betlog, calls):
 
 def test_final_revise_counts_as_reject_and_withdraw(ledger, betlog, calls):
     calls.side_effect = [result(strategist(memo(), memo(title="second"))),
-                         result(CRIT_REJECT), result({"action": "revise", "reason": "x", "memo": memo()}),
+                         result(CRIT_REJECT),
+                         result({"responses": [{"objection": "x", "response": "y"}],
+                                 "decision": "revise", "revised_memo": memo()}),
                          result(CRIT_REVISE),  # final round: revise -> reject
-                         result(CRIT_REJECT), result({"action": "withdraw", "reason": "fair point"})]
+                         result(CRIT_REJECT),
+                         result({"responses": [{"objection": "x", "response": "fair point"}],
+                                 "decision": "withdraw"})]
     run_cycle(ledger, betlog, 1)
     assert types(betlog, "c1-1") == ["proposed", "critiqued", "rebutted", "final_verdict"]
     assert betlog.events("c1-1")[-1]["payload"]["verdict"] == "reject"
@@ -111,10 +117,10 @@ def test_human_approve_stakes_and_reject_records(ledger, betlog, calls):
                          result(CRIT_APPROVE), result(CRIT_APPROVE)]
     run_cycle(ledger, betlog, 1)
     assert queue.approve(ledger, betlog, "c1-1")
-    assert types(betlog, "c1-1") == ["proposed", "critiqued", "human_approved", "staked"]
+    assert types(betlog, "c1-1") == ["proposed", "critiqued", "human_approved", "human_task_requested", "staked"]
     assert ledger.balance() == 45_000_000
     assert not queue.approve(ledger, betlog, "c1-2")  # 20 > 35% of 45
-    assert types(betlog, "c1-2") == ["proposed", "critiqued", "human_approved", "blocked"]
+    assert types(betlog, "c1-2") == ["proposed", "critiqued", "human_approved", "human_task_requested", "blocked"]
     assert ledger.balance() == 45_000_000
     queue.reject(ledger, betlog, "c1-2", "no")
     assert betlog.bets()["c1-2"]["status"] == "rejected"
@@ -131,3 +137,14 @@ def test_state_block(ledger, betlog):
     assert "a  active  stake $5.000000  digital_product  kill_by_cycle 6  'Sell a prompt pack'" in s
     assert "c2 b blocked (cfo) max_stake_pct" in s
     assert "max_stake_pct: 20.00 > limit 15.75 USD  'big one'" in s
+    assert "token rates by role:" in s and "caps: max_stake_pct=35%" in s
+
+
+def test_state_block_flags_overdue_bets(ledger, betlog):
+    betlog.append(1, "a", "proposed", memo(kill_by_cycle=2), "strategist")
+    betlog.append(1, "a", "staked", {"stake_usd": 5, "category": "digital_product"}, "cfo")
+    s = build_state(ledger, betlog, 5, today=date(2026, 10, 1))
+    assert "1 bet(s) past kill_by_cycle" in s and "a" in s
+    assert "OVERDUE" in s
+    not_overdue = build_state(ledger, betlog, 2, today=date(2026, 10, 1))
+    assert "OVERDUE" not in not_overdue

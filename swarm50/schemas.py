@@ -29,10 +29,25 @@ class Memo(Strict):
     human_minutes_required: int = Field(ge=0)
 
 
+class BetAction(Strict):
+    bet_id: str
+    action: Literal["hold", "kill"]
+    reason: str
+
+
+class WorkOrder(Strict):
+    bet_id: str
+    task: str
+    deliverable_type: Literal["text", "code", "listing_copy", "plan"]
+    max_tokens: int = Field(ge=0)
+
+
 class StrategistResponse(Strict):
     cycle_reasoning: str
     memos: list[Memo] = Field(max_length=3)
     no_bet_reason: str | None = None
+    bet_actions: list[BetAction] = Field(default_factory=list)
+    work_orders: list[WorkOrder] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _reason_required_when_empty(self):
@@ -52,16 +67,31 @@ class Critique(Strict):
     verdict: Literal["approve", "revise", "reject"]
 
 
+class Response(Strict):
+    objection: str
+    response: str
+
+
 class Rebuttal(Strict):
-    action: Literal["revise", "withdraw"]
-    reason: str
-    memo: Memo | None = None
+    responses: list[Response]
+    decision: Literal["revise", "withdraw"]
+    revised_memo: Memo | None = None
 
     @model_validator(mode="after")
     def _memo_required_when_revising(self):
-        if self.action == "revise" and self.memo is None:
-            raise ValueError("memo is required when action is 'revise'")
+        if self.decision == "revise" and self.revised_memo is None:
+            raise ValueError("revised_memo is required when decision is 'revise'")
         return self
+
+
+def memo_schema_text() -> str:
+    """Compact field: type list for the Memo schema, embedded in prompts via $memo_schema."""
+    lines = []
+    for name, field in Memo.model_fields.items():
+        ann = field.annotation
+        typ = getattr(ann, "__name__", str(ann))
+        lines.append(f"  {name}: {typ}")
+    return "{\n" + "\n".join(lines) + "\n}"
 
 
 def parse_model(model_cls, text: str):

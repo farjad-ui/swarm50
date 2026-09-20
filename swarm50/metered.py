@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass
 
 import anthropic
@@ -16,6 +17,9 @@ load_dotenv()
 OVERHEAD_TOKENS = 50          # fixed per-request framing overhead added to every input estimate
 CLI_TIMEOUT_S = 180
 MINIMAL_SYSTEM = "You are a helpful assistant."
+BATCH_DISCOUNT = 0.5          # Anthropic Message Batches API: half the normal per-token rate
+BATCH_POLL_INTERVAL_S = 5
+BATCH_POLL_TIMEOUT_S = 24 * 3600
 
 
 @dataclass
@@ -175,6 +179,69 @@ def _call_cli(model, messages, system, max_tokens, cache) -> Result:
     note = f"cli_cost_usd={cost} " + (f"cli_models={','.join(model_usage)}" if len(model_usage) > 1
                                        else f"cli_model={used}")
     return Result(data.get("result", ""), _usage_from(data.get("usage")), used, "claude_cli", cost, data, note)
+
+
+# ---- batch backend: Anthropic Message Batches API (api backend only, half price) ----
+
+def _call_api_batch(model, requests, cache) -> list[Result]:
+    """requests: list of (messages, system, max_tokens). One Batch submission for all of them.
+    UNVERIFIED AGAINST REAL API: only ever exercised against mocks in this codebase."""
+    client = anthropic.Anthropic()
+    reqs = []
+    for i, (messages, system, max_tokens) in enumerate(requests):
+        params = dict(model=model, max_tokens=max_tokens, messages=messages)
+        if system:
+            params["system"] = ([{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
+                                if cache else system)
+        reqs.append({"custom_id": f"req-{i}", "params": params})
+
+    batch = client.messages.batches.create(requests=reqs)
+    waited = 0
+    while batch.processing_status != "ended":
+        if waited >= BATCH_POLL_TIMEOUT_S:
+            raise BackendError(f"batch {batch.id} did not finish within {BATCH_POLL_TIMEOUT_S}s")
+        time.sleep(BATCH_POLL_INTERVAL_S)
+        waited += BATCH_POLL_INTERVAL_S
+        batch = client.messages.batches.retrieve(batch.id)
+
+    by_id = {}
+    for entry in client.messages.batches.results(batch.id):
+        r = entry.result
+        if getattr(r, "type", None) != "succeeded":
+            raise BackendError(f"batch request {entry.custom_id} did not succeed: {getattr(r, 'type', r)!r}")
+        msg = r.message
+        text = "".join(b.text for b in (getattr(msg, "content", None) or []) if getattr(b, "type", None) == "text")
+        by_id[entry.custom_id] = Result(text, _usage_from(msg.usage), getattr(msg, "model", model),
+                                        "api", None, msg, note="batch=1")
+    missing = [f"req-{i}" for i in range(len(requests)) if f"req-{i}" not in by_id]
+    if missing:
+        raise BackendError(f"batch {batch.id} is missing results for {missing}")
+    return [by_id[f"req-{i}"] for i in range(len(requests))]
+
+
+def metered_batch_call(ledgers, cycle, agent, role, requests, cache=False) -> list["Result"]:
+    """`ledgers` and `requests` (list of (messages, system, max_tokens)) are parallel lists, one
+    entry per logical call. Costs are debited into each ledger at BATCH_DISCOUNT of the normal rate.
+    Every ledger's pre-call budget gate still runs, before any request is submitted."""
+    if not ledgers:
+        return []
+    model = ledgers[0].config["roles"][role]
+    backend = ledgers[0].config.get("backend", "api")
+    if backend != "api":
+        raise ValueError(f"batch mode is only supported on the api backend, got {backend!r}")
+    for ledger, (messages, system, max_tokens) in zip(ledgers, requests):
+        wc = worst_case_cost(ledger, model, messages, system, max_tokens, cache, backend)
+        ledger.assert_can_spend(cycle, int(wc * BATCH_DISCOUNT))
+
+    results = _call_api_batch(model, requests, cache)
+
+    for ledger, result in zip(ledgers, results):
+        u = result.usage
+        ledger.record_token_usage(cycle, agent, model, u.input_tokens, u.output_tokens,
+                                  u.cache_creation_input_tokens, u.cache_read_input_tokens,
+                                  u.web_search_requests, backend=backend, note=result.note,
+                                  discount=BATCH_DISCOUNT)
+    return results
 
 
 BACKENDS = {"api": _call_api, "claude_cli": _call_cli}

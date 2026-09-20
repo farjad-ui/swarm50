@@ -5,8 +5,9 @@ from datetime import datetime, timezone
 from .ledger import usd_to_micro
 
 EVENT_TYPES = ("proposed", "critiqued", "rebutted", "withdrawn", "final_verdict", "human_approved",
-               "human_rejected", "staked", "return_recorded", "killed", "closed", "blocked", "malformed")
-ACTORS = ("strategist", "critic", "cfo", "human")
+               "human_rejected", "staked", "return_recorded", "killed", "closed", "blocked", "malformed",
+               "work_completed", "human_task_requested", "human_task_done")
+ACTORS = ("strategist", "critic", "cfo", "human", "worker")
 
 SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS bet_events (
@@ -84,8 +85,8 @@ class BetLog:
                 t, p = e["event_type"], e["payload"]
                 if t == "proposed":
                     memo = p
-                elif t == "rebutted" and p.get("memo"):
-                    memo = p["memo"]
+                elif t == "rebutted" and p.get("revised_memo"):
+                    memo = p["revised_memo"]
                 elif t == "staked":
                     stake_micro = usd_to_micro(p["stake_usd"])
                     category = p.get("category")
