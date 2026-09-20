@@ -55,7 +55,7 @@ the brief's prompt text is the source of truth for what the LLM will actually em
 the schema should use the same names throughout.
 How to change it: `swarm50/schemas.py::Rebuttal`, `swarm50/review.py::_review_memo`.
 
-### D2 — Convex arm's "scales steeply" reward is undefined   [NEEDS FARJAD]
+### D2 — Convex arm's "scales steeply" reward is undefined   [RESOLVED by Farjad, 2026-09-20]
 Milestone: M1
 What I decided: Shipped `prompts/objective_convex.md` verbatim from the brief, including the vague
 "scales steeply with how far above $starting_balance you finish" language. I did not invent a concrete
@@ -67,6 +67,9 @@ because a fabricated commitment is worse than an honest gap, and the brief says 
 How to change it: `prompts/objective_convex.md` (the paragraph after "the budget for its next phase
 scales steeply..."). No code changes needed once the wording is decided; `swarm50/prompts.py::render_objective`
 substitutes `$total_days` and `$starting_balance` into whatever text is in the file.
+Resolution: Farjad chose a concrete, honourable formula — next-phase budget = 10x profit,
+i.e. `10 x (final balance - $starting_balance)`. `prompts/objective_convex.md` now states this
+directly instead of "scales steeply". Full pytest suite reconfirmed green (90/90) after the change.
 
 ### D3 — Memo schema text embedded in prompts via introspection, not a copy   [FYI]
 Milestone: M1
