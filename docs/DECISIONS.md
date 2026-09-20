@@ -223,7 +223,7 @@ visibility -- it would be a small, additive change (`EVENT_TYPES` in `bets.py` p
 `_apply_bet_actions`).
 How to change it: `swarm50/cycle.py::_apply_bet_actions`.
 
-### D13 — prompts/worker.md wording   [NEEDS FARJAD]
+### D13 — prompts/worker.md wording   [RESOLVED by Farjad, 2026-09-20: reviewed, no changes requested]
 Milestone: M4
 What I decided: Wrote `prompts/worker.md` myself (the brief asks for this explicitly, "Write it
 yourself and record it as [NEEDS FARJAD] for review"): a short system prompt telling the worker it has
