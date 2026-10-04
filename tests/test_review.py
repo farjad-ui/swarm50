@@ -132,7 +132,7 @@ def test_state_block(ledger, betlog):
     betlog.append(2, "b", "blocked", {"rule": "max_stake_pct", "value_micro": 20_000_000,
                                       "limit_micro": 15_750_000, "memo": memo(title="big one")}, "cfo")
     s = build_state(ledger, betlog, 3, today=date(2026, 10, 1))
-    assert "days remaining: 18" in s
+    assert "days remaining: 28" in s
     assert "open exposure: $5.000000" in s
     assert "a  active  stake $5.000000  digital_product  kill_by_cycle 6  'Sell a prompt pack'" in s
     assert "c2 b blocked (cfo) max_stake_pct" in s
@@ -148,3 +148,8 @@ def test_state_block_flags_overdue_bets(ledger, betlog):
     assert "OVERDUE" in s
     not_overdue = build_state(ledger, betlog, 2, today=date(2026, 10, 1))
     assert "OVERDUE" not in not_overdue
+
+
+def test_days_remaining_follows_cycle_not_calendar(ledger, betlog):
+    assert "days remaining: 30" in build_state(ledger, betlog, 1, today=date(2030, 1, 1))
+    assert "days remaining: 1" in build_state(ledger, betlog, 30, today=date(2030, 1, 30))

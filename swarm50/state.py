@@ -5,13 +5,9 @@ from .ledger import MICRO, fmt_usd
 from .tasks import age_days, open_tasks
 
 
-def _days_remaining(config, today) -> int | None:
-    end = config.get("end_date")
-    if end is None:
-        return None
-    if isinstance(end, str):
-        end = date.fromisoformat(end)
-    return (end - today).days
+def _days_remaining(config, cycle) -> int:
+    """Cycles left including this one, so cycle 1 of 30 shows 30 and the last cycle shows 1."""
+    return config["total_days"] - cycle + 1
 
 
 def _role_rates(config) -> str:
@@ -25,11 +21,11 @@ def _role_rates(config) -> str:
 
 def build_state(ledger, betlog, cycle, today=None) -> str:
     today = today or date.today()
-    days = _days_remaining(ledger.config, today)
+    days = _days_remaining(ledger.config, cycle)
     total_tokens = -ledger._scalar("SELECT SUM(amount_micro) FROM transactions WHERE type='token_cost'")
     cfg = ledger.config
     lines = [
-        f"date: {today.isoformat()} | cycle: {cycle} | days remaining: {days if days is not None else 'n/a'}",
+        f"date: {today.isoformat()} | cycle: {cycle} | days remaining: {days}",
         f"balance: {fmt_usd(ledger.balance())} | token spend this cycle: {fmt_usd(ledger.cycle_spend(cycle))}"
         f" | total token spend: {fmt_usd(total_tokens)} | open exposure: {fmt_usd(betlog.open_exposure_micro())}",
         f"token rates by role: {_role_rates(cfg)}",

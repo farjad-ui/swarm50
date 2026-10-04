@@ -309,3 +309,14 @@ Alternatives considered: a full JSON dump per event inside a nested `<details>` 
 needing a click per event to see anything, defeating "collapsed by default" as a *readable* default.
 Everything shown is still HTML-escaped, so this is a display choice, not a trust boundary change.
 How to change it: `swarm50/report.py::_event_line`, `_decision_log`.
+
+### D19 — "days remaining" derived from cycle number, `end_date` removed   [FYI]
+Milestone: post-merge fix (2026-10-04)
+What I decided: `swarm50/state.py::_days_remaining` now returns `total_days - cycle + 1` (cycle 1 of 30
+shows 30, the last cycle shows 1). The static `end_date` config key is removed.
+Why: `end_date` was a fixed calendar date (2026-10-19) that ignored the kickoff date, so kicking off on
+any other day would have shown the strategist a "days remaining" that contradicted the 30 cycles its
+prompt promises. Cycle number already derives from the kickoff date, so this ties both to one source.
+Alternatives considered: compute `end_date` from the kickoff event; rejected because the dry-run harness
+runs cycle 1 without a kickoff, and the cycle number is already available everywhere the state is built.
+How to change it: `swarm50/state.py::_days_remaining`.
