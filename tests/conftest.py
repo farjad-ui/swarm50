@@ -10,7 +10,6 @@ CONFIG = {
     "max_stake_pct": 0.35,
     "max_open_exposure_pct": 0.60,
     "max_trading_exposure_pct": 0.50,
-    "end_date": "2026-10-19",
     "web_search_per_request_usd": 0.01,
     "backend": "api",
     "cli_input_overhead_tokens": 600,

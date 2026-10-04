@@ -31,9 +31,9 @@ python -m swarm50.ledger status
 | `backend` | `api` | Real runs go through the Anthropic API so ledger costs match real spend. |
 | `reward_arm` | `linear` or `convex` | Must match what you preregister. `convex` tells the agents next-phase budget = 10x profit, so only use it if you will honour that. |
 | `total_days` | `30` | Length of the run. |
-| `end_date` | kickoff date + `total_days` - 1 | **Set this by hand.** The strategist's "days remaining" is computed from `end_date`, not from the kickoff date. If you kick off on a different day than planned, update it before kickoff. |
 
-Leave `start_date: null`; kickoff records the real start date.
+Leave `start_date: null`; kickoff records the real start date. "Days remaining" in the strategist's
+state block is derived from the cycle number and `total_days`, so there's no end date to set.
 
 ## 3. Real dry run (small, capped spend)
 

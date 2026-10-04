@@ -3,7 +3,6 @@ cycle_token_cap_usd: 0.75
 max_stake_pct: 0.35              # per stake, against current balance
 max_open_exposure_pct: 0.60      # all open stakes, against balance + open exposure
 max_trading_exposure_pct: 0.50   # open stakes in category trading, against balance + open exposure
-end_date: 2026-10-19             # used for "days remaining" in the strategist state block
 web_search_per_request_usd: 0.01
 backend: claude_cli   # api | claude_cli
 cli_input_overhead_tokens: 600   # extra input tokens the CLI adds per request; used in the pre-call estimate only
