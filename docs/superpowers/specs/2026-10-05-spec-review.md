@@ -6,6 +6,13 @@
   the spec, the audit and the code, and red-teamed it. I then checked its least-supported claims
   against primary sources and the code. The reviewer's full report is in the appendix, unedited.
 
+## Resolution
+The owner decided: Line B now, with discovery from web research only (via Agent Reach's no-login
+backends); kickoff proposed for 9-10 Oct (moved to a 31 Oct target with a 10-11 Oct setup weekend; see
+spec section 18.1); the score subtracts ad spend and fees, and AI spend stays H3; about 10 min/day is
+acceptable; hard provider spend limits: yes; Pinterest by weekly CSV. All findings marked "Agree" below
+are folded into **spec v2**.
+
 ## Fact checks
 
 | Claim | Result | Source |
