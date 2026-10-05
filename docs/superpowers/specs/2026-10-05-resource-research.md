@@ -26,7 +26,8 @@ considered it and don't use it.
 | Exa free tier | **Adopt** | $10/month of credits (~1,400 searches/month) plus $20 at signup; 5 queries/second |
 | Jina Reader | **Adopt** with a free key | 20 requests/minute with no key; 500/minute and 10M free tokens with a free key |
 | [BERTopic](https://bertopic.com/what-is-bertopic/) topic modelling | **Reject** for v1 | built for thousands of documents and needs heavy ML dependencies; we read tens of pages, so the analyst model is enough |
-| Agent Reach cookie backends (X, Reddit, XiaoHongShu) | **Reject** | the project warns of account bans; Reddit's free tier bans commercial use |
+| Reddit via OpenCLI (Agent Reach's desktop backend), read-only | **Adopt** (v3.1, owner decision) | throwaway account in a dedicated Chrome profile; suspension and the user-agreement breach are owner-accepted risks; soft failure, never on the critical path |
+| Agent Reach cookie backends (X, XiaoHongShu) | **Reject** | the project warns of account bans |
 
 ## Stage 3: Strategy, memory and allocation
 **Goal:** a strategist that stays coherent over 90 days and learns from results.

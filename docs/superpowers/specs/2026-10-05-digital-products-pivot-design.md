@@ -1,6 +1,6 @@
-# swarm50 digital-products pivot: design spec (v3)
+# swarm50 digital-products pivot: design spec (v3.1)
 
-- **Status:** v3, approved in brainstorming. Awaiting the owner's read before implementation planning.
+- **Status:** v3.1 (v3 plus Reddit via OpenCLI), approved in brainstorming. Awaiting the owner's read before implementation planning.
 - **Companions:**
   - `2026-10-05-assumption-audit.md`: the risk register
   - `2026-10-05-spec-review.md`: the independent review
@@ -25,6 +25,11 @@
 10. **Gumroad email workflows** only after $100 earned and one payout (§4).
 11. **Kickoff Sat 31 Oct 2026** (owner confirmed); setup weekend 10-11 Oct.
 
+### v3.1 (2026-10-05)
+12. **Reddit allowed, read-only, via OpenCLI (§5):** search and read threads through the owner's
+    logged-in Chrome session on a **throwaway Reddit account**. Owner decision: the account may be
+    suspended and that is acceptable. Posting, voting and messaging on Reddit remain out of scope.
+
 ## 1. Summary
 swarm50 becomes a small, mostly autonomous **digital-products business** run by agents for 90 days on a
 $100 wallet. It has two product lines:
@@ -48,7 +53,7 @@ refunds, listing fees and ad spend.
 5. Decisions grounded in observed demand, with forecasts scored against reality (H1).
 
 ### Non-goals
-X/Twitter, AI video, avatars or personas, Reddit (at runtime), LinkedIn, memberships, unsolicited
+X/Twitter, AI video, avatars or personas, posting or voting on Reddit, LinkedIn, memberships, unsolicited
 engagement (follows, likes, DMs, replying on other people's posts), ad-platform automation, Notion
 automation, the Pinterest API, Threads keyword search.
 
@@ -80,7 +85,7 @@ automation, the Pinterest API, Threads keyword search.
 | 10 | Gemini Flash Image makes the art; code sets all text |
 | 11 | Two product lines with different products and evidence |
 | 12 | Line B niche discovered by the agents in week 1 from web research; owner approves |
-| 13 | Web research through Agent Reach's no-login backends (Exa, Jina) |
+| 13 | Web research through Agent Reach's no-login backends (Exa, Jina), plus Reddit read-only via OpenCLI on a throwaway account (v3.1) |
 | 14 | Test products: one owner approval on the finished draft |
 | 15 | Product studio with iteration; fewer, better products (budget A) |
 | 16 | Explore vs exploit rules (§7.3) |
@@ -99,7 +104,7 @@ automation, the Pinterest API, Threads keyword search.
                        become draft packages (files, 8-10 images, video, listing copy, scorecard)
  code   3. STATE       daily view (§9)
  AI     4. STRATEGIST  if due: build orders, scale-bet memos, research requests, post plan, lessons
- code   5. RESEARCH    Etsy probe; web via Agent Reach no-login backends
+ code   5. RESEARCH    Etsy probe; web via Agent Reach no-login backends; Reddit via OpenCLI
  AI     6. ANALYST     raw research -> graded brief
         (4-6 repeat up to 3 rounds in discovery mode; orders and memos only in the final round)
  AI     7. CRITIC      scale-bet memos and the niche thesis
@@ -124,7 +129,7 @@ hard run cap `run_ai_cap_usd`. Bucket membership is derived from the transaction
 | Module | Role | Network |
 |---|---|---|
 | `metered.py` (changed) | `metered_image_call` (Google); `Result.stop_reason`; image blocks in user messages; bucket-aware gate; prompt caching | AI APIs |
-| `research.py` (new) | Etsy probe; web fetch; analyst; notebook | Etsy (read), Exa, Jina |
+| `research.py` (new) | Etsy probe; web fetch; Reddit fetch; analyst; notebook | Etsy (read), Exa, Jina, Reddit (read, via OpenCLI) |
 | `studio/` (new) | roles, iteration loop, scorecards (§10) | none |
 | `render/` (new) | `html.py` (Playwright PDF and PNG), `xlsx.py` (XlsxWriter), `office.py` (LibreOffice recalc and preview), `sheets.py` (Drive copy link), `video.py` (ffmpeg), `images.py` (Gemini backgrounds) | Drive only |
 | `qa/` (new) | Vale, impeccable detector, contrast, `pypdf` print checks, formula tests, listing lint | none |
@@ -154,9 +159,9 @@ hard run cap `run_ai_cap_usd`. Bucket membership is derived from the transaction
 Line B may point to Etsy products; Line A never contacts Etsy buyers.
 
 ## 5. Research subsystem
-- **Requests:** `request_id`, `source` (`etsy` | `web`), `query`, `purpose`, `hypothesis`. For Etsy the
-  hypothesis is a **numeric threshold that code evaluates**; for web it is a sentence the analyst gives a
-  verdict on.
+- **Requests:** `request_id`, `source` (`etsy` | `web` | `reddit`), `query`, `purpose`, `hypothesis`. For
+  Etsy the hypothesis is a **numeric threshold that code evaluates**; for web and Reddit it is a sentence
+  the analyst gives a verdict on.
 - **Etsy probe:**
   - Calls: `findAllListingsActive` and `getShop`.
   - Code computes: the result count, price quartiles, favorites and listing age for the top 25, and views per
@@ -166,7 +171,16 @@ Line B may point to Etsy products; Line A never contacts Etsy buyers.
 - **Web:**
   - Agent Reach's no-login backends: Exa search returns the top 5 URLs, and Jina Reader fetches each page's
     text, truncated to 6,000 characters.
-  - Cookie backends and YouTube downloading are forbidden.
+  - YouTube downloading and every cookie or login backend other than Reddit are forbidden.
+- **Reddit (v3.1):**
+  - Through OpenCLI (`opencli reddit search` and `opencli reddit read`, `-f yaml`), riding a logged-in
+    **throwaway** Reddit account in a **dedicated Chrome profile** that is signed in to nothing else.
+  - Read-only: code calls only `search`, `read`, `subreddit` and `hot`. Code caps calls at 10 per cycle
+    and takes the top 5 posts per search, each truncated to 6,000 characters with comments.
+  - Soft failure: if Chrome or the extension isn't connected, or the account is suspended, the request is
+    logged as `unavailable` and the cycle carries on with web research. Reddit is never on the critical path.
+  - **Owner-accepted risks:** the account may be suspended, and automated reading breaks Reddit's user
+    agreement. Both are accepted because the account is disposable and nothing is posted.
 - **Analyst (Sonnet):** produces a `ResearchBrief`:
   - graded findings
   - recurring problems with the audience's own phrases
@@ -174,8 +188,8 @@ Line B may point to Etsy products; Line A never contacts Etsy buyers.
   - contradicting evidence (required)
   - a verdict
   - a one-line conclusion
-- **Quote limits, enforced by code:** at most 5 quotes per brief, each 120 characters or fewer, with URLs and
-  @handles stripped. Quotes are shown to the strategist fenced and labelled as data.
+- **Quote limits, enforced by code:** at most 5 quotes per brief, each 120 characters or fewer, with URLs,
+  @handles and Reddit `u/` usernames stripped. Quotes are shown to the strategist fenced and labelled as data.
 - **Honest boundary:** short audience quotes do reach the strategist and, through it, the copy; that's
   intended. The defences are:
   1. no agent has a side-effecting tool
@@ -600,7 +614,7 @@ The batch ends with a fixed item: check Etsy messages and Gumroad emails, and re
 | 7 | **Hard spend limits:** Anthropic workspace limit; Google budget alert plus a Gemini requests-per-day quota | 15 min |
 | 8 | Install LibreOffice, Node.js (for impeccable), Vale and ffmpeg; `playwright install chromium` | 30 min |
 | 9 | Create a GitHub Pages assets repo (public) | 10 min |
-| 10 | Agent Reach, no-login backends only (review `install.md` first) | 15 min |
+| 10 | Agent Reach (no-login backends) + OpenCLI with a dedicated Chrome profile logged in to a throwaway Reddit account only | 20 min |
 | 11 | Approve the design system and brand board | 20 min |
 
 **Stated downside:** an Etsy suspension is tied to the owner's identity and is effectively permanent.
@@ -639,7 +653,8 @@ The batch ends with a fixed item: check Etsy messages and Gumroad emails, and re
 ## 21. Testing
 1. §17 fixes first, each with a failing test.
 2. **Offline module tests:**
-   - research and ingest against saved responses
+   - research and ingest against saved responses, including saved OpenCLI Reddit YAML; a failing
+     `opencli` call yields `unavailable` and the cycle continues
    - the publisher against mocked `httpx`
    - rendering real files locally (Playwright, XlsxWriter, LibreOffice; skipped when those tools are absent)
    - QA gates catching seeded defects: a broken formula, low contrast, an AI-tell phrase, an overused font,
@@ -680,6 +695,8 @@ The batch ends with a fixed item: check Etsy messages and Gumroad emails, and re
 - **Etsy:** whether the API exposes the AI checkbox; fee ledger entries; refund data.
 - **Threads:** reply and insight permissions in tester mode; link-click insight fields.
 - **Agent Reach:** invocation from Python; free-tier limits on Windows.
+- **OpenCLI Reddit:** invocation from the scheduled task (Chrome must be running with the extension);
+  output stability of `-f yaml`; how quickly a throwaway account gets rate-limited at 10 calls per cycle.
 - **Google:** the Drive copy-link flow and how faithfully formulas convert to Sheets.
 - **Chromium:** internal PDF links are preserved and work in GoodNotes.
 - **impeccable CLI:** behaviour on static HTML files on Windows; which rules apply to print.
@@ -688,7 +705,7 @@ The batch ends with a fixed item: check Etsy messages and Gumroad emails, and re
 - **Vendored skills:** confirm each source's licence file is reproduced at the time of copying.
 
 ## 24. Out of scope (parked)
-X/Twitter · AI video, avatars and personas · Reddit at runtime (last30days is used at build time only) ·
+X/Twitter · AI video, avatars and personas · posting or voting on Reddit ·
 LinkedIn · Gumroad memberships · Medium/Substack · unsolicited engagement · ad-platform automation ·
-Notion automation · the Pinterest API · Threads keyword search · Agent Reach cookie backends ·
+Notion automation · the Pinterest API · Threads keyword search · Agent Reach cookie backends other than Reddit ·
 BERTopic · AI image-scoring models · Langfuse.
