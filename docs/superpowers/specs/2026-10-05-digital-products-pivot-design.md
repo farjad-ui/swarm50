@@ -1,6 +1,6 @@
 # swarm50 digital-products pivot: design spec (v3.1)
 
-- **Status:** v3.1 (v3 plus Reddit via OpenCLI), approved in brainstorming. Awaiting the owner's read before implementation planning.
+- **Status:** v3.2 (v3.1 plus the Telegram bot, Gumroad automation, Offsite Ads on, one coherent shop), approved in brainstorming. Awaiting the owner's read before implementation planning.
 - **Companions:**
   - `2026-10-05-assumption-audit.md`: the risk register
   - `2026-10-05-spec-review.md`: the independent review
@@ -29,6 +29,24 @@
 12. **Reddit allowed, read-only, via OpenCLI (§5):** search and read threads through the owner's
     logged-in Chrome session on a **throwaway Reddit account**. Owner decision: the account may be
     suspended and that is acceptable. Posting, voting and messaging on Reddit remain out of scope.
+
+### v3.2 (2026-10-05)
+13. **Telegram approval bot (§12.5):** approve the daily batch from your phone. Same approval events and
+    fingerprint checks as the terminal command, which stays as the fallback.
+14. **Gumroad is now automatable (§4, §13):** Gumroad's official CLI and API (`antiwork/gumroad-cli`) now
+    cover creating products (as drafts or published), uploading files, covers and previews, custom HTML
+    landing pages, rich content, audience emails and email workflows. Line B products publish through the
+    API after owner approval, so the ~10-minute manual step per product is gone.
+15. **Offsite Ads on (§18.2):** the earlier advice to opt out is reversed. Offsite Ads charge only on
+    attributed sales (verify the rate and cap at setup), a seller on Reddit credited Etsy's own Pinterest
+    promotion for growth, and a new shop has no traffic to protect. Its fees appear in ingest, so the
+    strategist sees them.
+16. **One coherent shop (§7.3):** Line A explores ≥4 **sub-niches under one shop theme**, not unrelated niches.
+    Reddit sellers' strongest critique of new shops was scattered products, a shop description that
+    doesn't match, and fake owner photos.
+17. Additions to the vendored rules (§8.3): **hallmark** (57 slop-test gates, 21 themes) and
+    **etsy-seller-seo-system** listing rules (a stoplist of subjective words, at most 2 tags per phrase
+    cluster, the AI-disclosure format).
 
 ## 1. Summary
 swarm50 becomes a small, mostly autonomous **digital-products business** run by agents for 90 days on a
@@ -110,7 +128,7 @@ automation, the Pinterest API, Threads keyword search.
  AI     7. CRITIC      scale-bet memos and the niche thesis
  AI     8. SOCIAL      Threads posts (with images) and pin drafts
  human  9. APPROVE     `python -m swarm50.approve`
- code  10. PUBLISH     Etsy / Threads APIs; Gumroad + weekly pin CSV -> owner tasks
+ code  10. PUBLISH     Etsy / Threads / Gumroad APIs; weekly pin CSV -> owner task
  ------ separately, every 2 hours during waking hours ------
  AI+cd     REPLIES     reply assistant (§12.4)
 ```
@@ -137,6 +155,8 @@ hard run cap `run_ai_cap_usd`. Bucket membership is derived from the transaction
 | `publish/` (new) | `etsy.py`, `threads.py`, `assets.py` (GitHub Pages), `pins_csv.py`; lint, limits, token refresh | Etsy, Threads, GitHub write |
 | `replies.py` (new) | reply assistant | Threads |
 | `approve.py` (new) | daily batch CLI and HTML preview | none |
+| `telegram.py` (new, v3.2) | approval bot, alerts, digest | Telegram Bot API |
+| `publish/gumroad.py` (new, v3.2) | create draft → publish; files, covers, previews; landing page; workflows and emails as drafts | Gumroad write |
 | existing modules | updated per §16 and §17 | none |
 
 ## 4. Product lines
@@ -147,14 +167,22 @@ hard run cap `run_ai_cap_usd`. Bucket membership is derived from the transaction
 | Traffic | Etsy search + Pinterest CSV | Threads (with images) + Pinterest CSV |
 | Fits | spreadsheets (Excel + Sheets), printables (A4 + Letter), **hyperlinked digital planners**, trackers | playbooks, swipe files, checklists + walkthroughs, profession-specific prompt packs, calculators with a guide, bundles |
 | Price / volume | $5-17; ~15 core + ~15-20 adaptations | $15-49; 4 products: lead magnet → core → premium (+1 spare) |
-| Niche shape | ≥4 niches during exploration | one niche (the approved thesis) |
+| Niche shape | one shop theme; ≥4 sub-niches under it during exploration | one niche (the approved thesis) |
 | Evidence | Etsy probe (+ web) | web research (+ Etsy probe for adjacent demand) |
-| Owner time per product | ~0 | ~10 min (Gumroad has no product API) |
+| Owner time per product | ~0 | ~0 (Gumroad API publishes after approval; v3.2) |
 
 **Gumroad funnel:**
 - The free lead magnet collects emails from day 1, and the paid upgrade is linked inside the lead magnet.
 - Gumroad's automated email sequences (Workflows) only unlock **after $100 earned and one payout**. At that
-  point the owner sets up the agent-drafted 3-5 email sequence (an owner task; Gumroad has no API for it).
+  point the agent-drafted 3-5 email sequence is written through the API (`workflows`), with each email
+  owner-approved in the batch. Broadcasts are created as drafts and sent only after approval.
+- **Product pages:** each Line B product gets a **custom HTML landing page** rendered from the design system
+  and published through the API (`products page publish`), if the seller account has Gumroad's custom HTML
+  pages feature (verify at setup). The fallback is standard rich content set through the API.
+- **Publishing:** create as `--draft`, then publish after approval. An account that can't publish yet
+  (unconfirmed email, no payout method) keeps products as drafts and reports why.
+- **Seller reality check (Reddit):** Gumroad brings little traffic until a product already sells;
+  traffic has to come from socials first.
 
 Line B may point to Etsy products; Line A never contacts Etsy buyers.
 
@@ -251,7 +279,7 @@ $100, written once at kickoff.
 
 | Phase | Cycles | Line A | Line B |
 |---|---|---|---|
-| Explore | 2-30 | ~10 cores across ≥4 niches, at most 3 per niche | thesis approved → free lead magnet → Threads tests |
+| Explore | 2-30 | ~10 cores across ≥4 sub-niches **under one shop theme** (consistent shop name, banner, about text and sections; no fake owner photo), at most 3 per sub-niche | thesis approved → free lead magnet → Threads tests |
 | Exploit | 31-60 | adaptations of products with traction, plus 3-4 cores near the winners | ~$15 core product only if the lead magnet gets downloads and clicks |
 | Harvest | 61-90 | adaptations and listing refreshes; **no new cores after cycle 65** | ~$49 premium only after the core has 3+ sales |
 
@@ -282,8 +310,8 @@ trailing-30-cycle equivalent before that.
 - **No double counting:** each sale or refund is keyed on `external_id`, which has a unique index.
 - **Sanity hold:** if more than $100 would be credited in one day, ingest writes nothing and creates an owner
   task to confirm.
-- **Gumroad mapping:** the owner's task-done note must include the Gumroad product ID. Sales of unmapped
-  products are refused and flagged.
+- **Gumroad mapping:** the publisher records the Gumroad product ID when it creates the product. Sales of
+  unmapped products are refused and flagged.
 - **Manual entries:** `record-return` stays for edge cases.
 
 ### 7.7 Overhead and the true P&L
@@ -378,6 +406,8 @@ Relevant rules are copied into the role prompts, with licences and attribution i
 | Nano Banana prompt-craft rules (materials, framing, ratio) | open source | art director |
 | Planner generators (hyperlink navigation patterns) | open source | planner templates |
 | Etsy listing helpers (alt text, category path, digital checklist) | open source | listing copy, product brief |
+| hallmark (57 slop-test gates, 21 themes, macrostructure choice) (v3.2) | MIT | design reviewer, builders |
+| etsy-seller-seo-system (subjective-word stoplist, at most 2 tags per phrase cluster, title formula, AI-disclosure format) (v3.2) | MIT | listing copy, listing lint |
 
 ## 9. Daily view (state block)
 About 3,000 tokens:
@@ -494,10 +524,8 @@ A product whose review was refused by the budget **cannot enter the batch**; it 
 - `approve_session` timing feeds H5. `--pause` / `--resume` control publishing.
 
 ### 12.2 Owner tasks
-- Gumroad product creation (the note must include the product ID)
 - ad setup and scale-bet close entries
 - the weekly Pinterest CSV upload (~5 min)
-- Gumroad Workflow setup (after the first payout)
 - the AI checkbox, if needed
 - Notion duplication
 - sanity-hold confirmations
@@ -526,6 +554,28 @@ The batch ends with a fixed item: check Etsy messages and Gumroad emails, and re
 - **Posts:** threads-skills hook formulas, chosen by goal; at most 3 a day; **no engagement bait** ("comment X
   for the link" posts get about half the reach). The link goes in the post or our own first reply.
 
+### 12.5 Telegram approval bot (v3.2)
+- **What it is:** a small bot in our own code (`swarm50/telegram.py`) talking to the Telegram Bot API over
+  plain `httpx` long polling. No third-party bot framework, and no AI in the loop.
+- **Messages it sends:**
+  - **Daily batch:** one message per draft package (cover image plus up to 4 previews, title, price,
+    scorecard), with inline buttons ✅ approve / ❌ reject / ⏭ skip. A reject asks for a one-line reason.
+  - **Scale bets and the thesis:** a summary plus buttons. The full detail stays on the HTML preview page
+    (linked).
+  - **Queued replies:** the comment, the drafted reply, and approve / edit-in-CLI / drop.
+  - **Alerts:** sanity holds, publish failures, gate results, the run cap nearing, a missed cycle.
+  - **A short daily digest:** balance, score, what shipped.
+- **Binding approval to content:** each button's callback data carries the draft ID and a short prefix of
+  its content hash. On a press, code re-checks the full hash before writing `draft_approved`. If the draft
+  changed since the message went out, the approval is refused and the message refreshed.
+- **Access:** only the owner's chat ID (recorded once at setup, stored in config) is obeyed. Messages from
+  any other chat are ignored and logged. The bot token lives in `.env`.
+- **Commands:** `/pause` and `/resume` (the kill switch), `/status`, `/batch` (resend pending items).
+- **Running:** a lightweight poller started by Task Scheduler at logon. If it's down, nothing is lost:
+  items stay pending, the terminal `approve` command works the same way, and drafts still expire after 3 days.
+- **H5 timing:** a session runs from the first message to the last button press; `approve_session` events
+  record it either way.
+
 ## 13. Publisher and safety
 1. Publish only items with `draft_approved` whose `content_hash` matches. The one exception is reply-assistant
    auto-sends, which pass the reply lint instead.
@@ -537,7 +587,7 @@ The batch ends with a fixed item: check Etsy messages and Gumroad emails, and re
 6. Kill switch: `publishing_enabled: false` or `approve --pause` (this also pauses replies).
 7. Credentials in `.env`; refreshed tokens in `state/tokens.json` (git-ignored, never synced).
 8. Tokens refresh automatically (Threads tokens last 60 days; Etsy uses refresh tokens).
-9. A killed bet's Etsy listing is deactivated through the API; Gumroad becomes an owner task.
+9. A killed bet is unpublished through the API on both Etsy (deactivate) and Gumroad (`products unpublish`).
 10. `--force` reruns are refused once publishing is enabled.
 
 ## 14. Ingest
@@ -606,9 +656,10 @@ The batch ends with a fixed item: check Etsy messages and Gumroad emails, and re
 |---|---|---|
 | 0 | Confirm employment terms allow a private online business | before any account |
 | 1 | Etsy developer account + API key (**do first**; 24h-3 weeks) | 15 min |
-| 2 | Etsy shop, ID check, Payoneer (within 30 days), policies, **opt out of Offsite Ads** | 60-90 min |
+| 2 | Etsy shop, ID check, Payoneer (within 30 days), policies, shop theme and about text consistent with the brand, **leave Offsite Ads on** (pay only per attributed sale; confirm the current rate and cap) | 60-90 min |
 | 3 | Instagram Professional + Threads + Meta app; Threads Tester; token with post, reply and insight permissions | 30 min |
-| 4 | Gumroad account + PKR payout | 20 min |
+| 4 | Gumroad account + PKR payout; create an access token (`gumroad auth login` or a seller token) → `.env` | 25 min |
+| 4b | Telegram: create a bot with @BotFather; send it one message so code can record your chat ID; token → `.env` | 5 min |
 | 5 | Pinterest business account | 10 min |
 | 6 | Anthropic + Google AI Studio keys; Drive API OAuth; Exa key; Jina free key → `.env` | 30 min |
 | 7 | **Hard spend limits:** Anthropic workspace limit; Google budget alert plus a Gemini requests-per-day quota | 15 min |
@@ -685,7 +736,8 @@ The batch ends with a fixed item: check Etsy messages and Gumroad emails, and re
 11. Approve CLI + preview + pin CSV
 12. Etsy publisher + ingest + privacy whitelist
 13. Threads publisher + assets repo + insights + reply assistant
-14. Gumroad ingest + mapping
+14. Gumroad publisher (products, files, covers, landing pages, workflows) + ingest + mapping
+14b. Telegram approval bot
 15. Daily view, report (true P&L, score, burn rate, studio stats), scheduler, away mode, backups
 16. Docs: README, RULES, KICKOFF_CHECKLIST, PREREGISTRATION
 17. Sandbox cycle + dry run + calibration → set the caps and cadence
@@ -700,7 +752,13 @@ The batch ends with a fixed item: check Etsy messages and Gumroad emails, and re
 - **Google:** the Drive copy-link flow and how faithfully formulas convert to Sheets.
 - **Chromium:** internal PDF links are preserved and work in GoodNotes.
 - **impeccable CLI:** behaviour on static HTML files on Windows; which rules apply to print.
-- **Gumroad:** cover URLs are public; Workflow unlock conditions.
+- **Gumroad:** cover URLs are public; Workflow unlock conditions; whether the account has the custom HTML
+  pages feature; publish restrictions on a new account; the exact REST endpoints behind the CLI commands we
+  use (we call them via `httpx`, with the CLI as the reference).
+- **Etsy Offsite Ads:** current fee rate, cap and attribution window; how the fees show up in the
+  payment-account ledger.
+- **Telegram:** photo and media-group limits for preview images; callback data length (we bind each
+  button to the draft's content hash).
 - **Gemini:** image model ID and price.
 - **Vendored skills:** confirm each source's licence file is reproduced at the time of copying.
 

@@ -103,7 +103,7 @@ invention by the AI as possible.
 - The reply assistant is in.
 - No engagement bait.
 
-## Stage 8: The Gumroad funnel
+## Stage 8: The Gumroad funnel (see Part 3: Gumroad now has full product and workflow APIs)
 **Finding** ([Gumroad workflows](https://insightraider.com/en/answers/how-to-build-an-email-list-with-gumroad)): Workflows (automated email sequences, e.g. free → paid upgrade) are free, but **Gumroad only allows sending emails after $100 earned and one payout**.
 
 **What changes:**
@@ -116,7 +116,7 @@ invention by the AI as possible.
 |---|---|
 | Etsy | `etsy-python-sdk` (if it passes evaluation) or `httpx` |
 | Threads | thin `httpx` client (post, replies, insights) |
-| Gumroad | `httpx` (`GET /v2/sales`) |
+| Gumroad | **write and read through the API** (`httpx`; endpoints as used by the official [antiwork/gumroad-cli](https://github.com/antiwork/gumroad-cli)): `products create --draft` → `publish`, file, cover and preview uploads, custom HTML landing pages, rich content, audience emails, workflows; `GET /v2/sales` for ingest. (Corrects the earlier finding that Gumroad had no product API.) |
 | Pinterest | **bulk CSV** with columns Title, Media URL, Pinterest board, Thumbnail, Description, Link, Publish date (`YYYY-MM-DD HH:MM`), Keywords; ≤200 pins per file; publish dates spread across the week so one weekly upload posts daily ([format](https://pinsmachine.com/blog/pinterest-csv-bulk-upload-the-fastest-way-to-pin-100-images-in-one-shot)) |
 
 ## Stage 10: Efficiency and cost
@@ -164,3 +164,40 @@ internal Anthropic prompt, so its licensing is unclear).
 - an Exa API key
 - a Jina free key
 - Node.js, to run the impeccable detector CLI (`npx impeccable`)
+- a Gumroad access token
+- a Telegram bot token
+
+## Part 3: Reddit and GitHub pass (Agent Reach: OpenCLI Reddit + GitHub CLI)
+
+### Reddit: what sellers actually report
+Threads read in full with comments: [specificity wins](https://www.reddit.com/r/passive_income/comments/1s67r3n/),
+[is Etsy worth it in 2026](https://www.reddit.com/r/DigitalProductSellers/comments/1wajong/),
+[zero spreadsheet sales critique](https://www.reddit.com/r/EtsyDigitalSeller/comments/1vg36z8/),
+[2 years of tracked side hustles](https://www.reddit.com/r/passive_income/comments/1s92wwq/),
+[Gumroad $49 × 113](https://www.reddit.com/r/passive_income/comments/1rhwgkd/),
+[Gumroad to $2k/month](https://www.reddit.com/r/passive_income/comments/1kkxnf3/).
+
+| Signal | Source strength | Design consequence |
+|---|---|---|
+| **Specificity beats everything:** "daily planner" has ~50k results, while "daily planner for ADHD college students with a late diagnosis" has ~12. **Niche goes in the title, broad terms in the tags** | very high engagement (1k upvotes), consistent with the 2026 SEO guides | listing rules: title = niche phrase; tags = broader buyer phrases |
+| **A real seller's numbers:** 50k+ digital products sold, 16k orders this year, **average price $3** (kids printables). Their new shop: first sale in week 1 but **only $12 in the first month** | first-hand, specific | calibrates H1 forecasts and expectations: month 1 ≈ near zero even for experts |
+| A second seller: ~250 sales/month (~$2.5k) after 16 months, kids niche; buys products that are "really high quality… not something I'd make myself" | first-hand | **kids/education printables** are a K1 candidate cluster; reinforces quality over volume |
+| **Higher barrier to entry sells:** if anyone can make it free in minutes, it's harder to sell | multiple comments | favour functional spreadsheets and hyperlinked planners over simple printables |
+| **Etsy promoted a seller's listings on Pinterest** (via Offsite Ads), taking them from €10 to €120/month | first-hand | **reverse the opt-out:** leave Offsite Ads on (pay per attributed sale only) |
+| Critique of a zero-sales spreadsheet shop: **scattered unrelated products**, a shop description that doesn't match, a **fake owner photo looks scammy**, a "global" product with US-only tax content, too few photos, tags describing rather than matching searches | detailed teardown | **one coherent shop theme**; no fake persona photo; content editor checks jurisdiction consistency; 8-10 photos; tags = search phrases |
+| Gumroad: "post on socials first; once you get a few sales, Gumroad starts recommending you" | consistent across threads | Line B depends on Threads; Discover is a later bonus |
+| Reddit readers call out AI-written posts on sight ("AI slop") | many comments | confirms the anti-slop gates for every word we publish |
+
+### GitHub: repos found (stars as of 2026-10-05)
+| Repo | Licence / stars | Verdict |
+|---|---|---|
+| [antiwork/gumroad-cli](https://github.com/antiwork/gumroad-cli) | MIT, official | **Adopt (reference):** proves full product creation and publishing, files, covers, landing pages, emails and workflows through the API; also `gumroad mcp` for build-time testing |
+| [Nutlope/hallmark](https://github.com/Nutlope/hallmark) | MIT, ~29.6k | **Vendor:** 57 slop-test gates, 21 themes, a "macrostructure" choice per brief so two products don't look like recolours of one template |
+| [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill) | MIT, ~92.7k | already adopted |
+| [hardikpandya/stop-slop](https://github.com/hardikpandya/stop-slop) / [petergyang/no-ai-slop](https://github.com/petergyang/no-ai-slop) | MIT, ~17.8k / ~11.9k | already adopted (writing rules) |
+| [moiz-za/etsy-seller-seo-system](https://github.com/moiz-za/etsy-seller-seo-system) | MIT, 35 (updated today) | **Borrow rules** (title formula within 40 characters, subjective-word stoplist, at most 2 tags per phrase cluster, AI-disclosure format). **Don't** use its live Etsy autocomplete or SERP scraping at runtime (unofficial scraping, from the shop's own IP) |
+| [devonjhills/etsy-digital-mockup-tools](https://github.com/devonjhills/etsy-digital-mockup-tools) | MIT, 13 | **Borrow:** Etsy OAuth2 + PKCE bulk-listing flow and listing templates; mockup and video ideas. Its image approach is superseded by our HTML templates |
+| [brianschwabauer/remarkably-organized](https://github.com/brianschwabauer/remarkably-organized) | MIT, 227 | **Borrow:** planner page layouts and navigation for e-ink and tablets |
+| [aserper/etsy-mcp](https://github.com/aserper/etsy-mcp) | MIT, 37 tools | **Build time only:** handy for exploring the Etsy API during development |
+| [interwebologist/wordsy_python](https://github.com/interwebologist/wordsy_python) | 38 | reject (scraping trending listings) |
+| [SoCloseSociety/PinterestBulkPostBot](https://github.com/SoCloseSociety/PinterestBulkPostBot) | MIT | reject (Selenium automation of Pinterest = ToS risk; we use the official CSV upload) |
